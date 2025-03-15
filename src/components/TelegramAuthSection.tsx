@@ -94,20 +94,31 @@ const TelegramAuthSection = () => {
     try {
       console.log("Saving Telegram credentials for user:", user.id);
       
-      // Store API credentials securely via Edge Function
+      // First try to save API ID
+      console.log("Saving API ID...");
       const apiIdSaved = await saveApiKey('telegram_api_id', apiId);
       
       if (!apiIdSaved) {
+        console.error("Failed to save API ID");
         throw new Error("Failed to save API ID");
       }
       
+      // Then try to save API Hash
+      console.log("Saving API Hash...");
       const apiHashSaved = await saveApiKey('telegram_api_hash', apiHash);
       
       if (!apiHashSaved) {
+        console.error("Failed to save API Hash");
         throw new Error("Failed to save API Hash");
       }
       
-      console.log("API credentials saved:", { apiIdSaved, apiHashSaved });
+      console.log("API credentials saved successfully");
+      
+      // If both were saved successfully, update the user settings
+      await updateSettings({
+        telegramIntegrationEnabled: true,
+        telegramHandles: settings?.telegramHandles || []
+      });
       
       // Update UI state to show success
       setConnectionStatus('connected');
@@ -118,7 +129,7 @@ const TelegramAuthSection = () => {
       });
     } catch (error) {
       console.error('Error connecting to Telegram:', error);
-      setErrorMessage(error.message || "Could not connect to Telegram");
+      setErrorMessage(error.message || "Failed to save API credentials");
       toast({
         title: "Connection Failed",
         description: error.message || "Failed to save API credentials",

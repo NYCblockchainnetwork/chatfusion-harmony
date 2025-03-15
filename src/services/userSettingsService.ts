@@ -80,10 +80,6 @@ export const userSettingsService = {
         console.log('Successfully saved user settings to Supabase');
       }
       
-      toast({
-        title: 'Success',
-        description: 'User settings saved successfully',
-      });
       return true;
     } catch (error) {
       console.error('Error saving user settings:', error);
@@ -171,7 +167,7 @@ export const userSettingsService = {
     console.log(`Saving ${service} API key for user:`, userId);
     try {
       // Call Supabase Edge Function to securely store API key
-      const { data, error } = await supabase.functions.invoke('store-api-key', {
+      const response = await supabase.functions.invoke('store-api-key', {
         body: { 
           userId,
           service,
@@ -179,8 +175,10 @@ export const userSettingsService = {
         }
       });
       
+      const { data, error } = response;
+      
       if (error) {
-        console.error(`Error saving ${service} API key:`, error);
+        console.error(`Error from edge function call:`, error);
         toast({
           title: 'Error',
           description: `Failed to save ${service} API key: ${error.message || "Unknown error"}`,
@@ -190,7 +188,7 @@ export const userSettingsService = {
       }
       
       if (data && data.error) {
-        console.error(`Error from edge function:`, data.error);
+        console.error(`Error from edge function response:`, data.error);
         toast({
           title: 'Error',
           description: `Failed to save ${service} API key: ${data.error}`,
@@ -199,33 +197,33 @@ export const userSettingsService = {
         return false;
       }
       
-      console.log(`Successfully saved ${service} API key via Edge Function`);
+      console.log(`Successfully saved ${service} API key via Edge Function:`, data);
       
-      // Update user settings to indicate this service is connected
-      if (service.startsWith('telegram_')) {
-        const settings = await this.getUserSettings(userId);
-        if (settings) {
-          if (service === 'telegram_api_id' || service === 'telegram_api_hash') {
-            // Only update if we have both keys
-            const hasApiId = service === 'telegram_api_id' || await this.getApiKey(userId, 'telegram_api_id');
-            const hasApiHash = service === 'telegram_api_hash' || await this.getApiKey(userId, 'telegram_api_hash');
-            
-            if (hasApiId && hasApiHash) {
-              // Both keys present, update settings
-              await this.saveUserSettings(userId, {
-                ...settings,
-                telegramIntegrationEnabled: true,
-                telegramHandles: settings.telegramHandles || []
-              });
+      // Update user settings to indicate this service is connected if needed
+      if (service.startsWith('telegram_') && apiKey.trim() !== '') {
+        try {
+          const settings = await this.getUserSettings(userId);
+          if (settings) {
+            if (service === 'telegram_api_id' || service === 'telegram_api_hash') {
+              // Only update if we have both keys
+              const hasApiId = service === 'telegram_api_id' || await this.getApiKey(userId, 'telegram_api_id');
+              const hasApiHash = service === 'telegram_api_hash' || await this.getApiKey(userId, 'telegram_api_hash');
+              
+              if (hasApiId && hasApiHash) {
+                // Both keys present, update settings
+                await this.saveUserSettings(userId, {
+                  ...settings,
+                  telegramIntegrationEnabled: true,
+                  telegramHandles: settings.telegramHandles || []
+                });
+              }
             }
           }
+        } catch (err) {
+          console.error('Error updating settings after API key save:', err);
+          // Don't fail the overall operation if just the settings update fails
         }
       }
-        
-      toast({
-        title: 'API Key Saved',
-        description: `Your ${service} API key has been securely stored`,
-      });
       
       return true;
     } catch (error) {

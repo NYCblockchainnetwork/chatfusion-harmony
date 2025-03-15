@@ -87,8 +87,9 @@ serve(async (req) => {
       return createResponse({ success: true, message: "API key deleted" });
     }
 
+    console.log(`Storing ${service} API key for user ${userId}`);
+    
     // Store the API key in the user_api_keys table
-    console.log("Storing API key");
     const { error: upsertError } = await supabaseClient
       .from("user_api_keys")
       .upsert(
@@ -102,12 +103,15 @@ serve(async (req) => {
       );
 
     if (upsertError) {
-      console.error("Error storing API key:", upsertError);
+      console.error(`Error storing ${service} API key:`, upsertError);
       return createErrorResponse(`Error storing API key: ${upsertError.message}`);
     }
 
-    console.log("API key stored successfully");
-    return createResponse({ success: true });
+    console.log(`Successfully stored ${service} API key`);
+    return createResponse({ 
+      success: true,
+      message: `${service} API key saved successfully` 
+    });
   } catch (error) {
     console.error("Unexpected error in store-api-key function:", error);
     return createErrorResponse(`Internal server error: ${error.message}`);
