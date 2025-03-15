@@ -27,6 +27,7 @@ serve(async (req) => {
     const { userId, service, apiKey } = requestData;
     
     console.log(`Processing request for user ${userId} and service ${service}`);
+    console.log(`API key value type: ${typeof apiKey}, length: ${apiKey?.length || 0}`);
 
     // Validate inputs
     if (!userId) {
@@ -73,11 +74,15 @@ serve(async (req) => {
     // Get the secret key from environment variables when the service is a predefined one
     let finalApiKey = apiKey;
     if (service === 'telegram_api_id' || service === 'telegram_api_hash') {
-      // Use the actual secret value stored in Supabase secrets if the apiKey matches the env var name
+      // Check if we should use the environment secret
       const secretValue = Deno.env.get(service);
       if (apiKey === service && secretValue) {
         console.log(`Using secret value for ${service} from environment`);
         finalApiKey = secretValue;
+        console.log(`Secret value found, length: ${finalApiKey.length}`);
+      } else if (apiKey === service) {
+        console.error(`Secret ${service} not found in environment variables`);
+        return createErrorResponse(`Error: Required secret ${service} not found in Supabase`);
       }
     }
 
