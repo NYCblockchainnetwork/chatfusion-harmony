@@ -33,7 +33,7 @@ export const userSettingsService = {
       }
       
       if (userSettings) {
-        return userSettings.settings;
+        return userSettings.settings as Partial<UserSettings>;
       }
       
       // If no settings found, create default
@@ -117,7 +117,7 @@ export const userSettingsService = {
       }
       
       if (userPreferences) {
-        return userPreferences.preferences;
+        return userPreferences.preferences as Partial<UserPreferences>;
       }
       
       // If no preferences found, create default
