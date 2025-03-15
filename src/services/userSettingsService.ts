@@ -1,4 +1,3 @@
-
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -184,7 +183,17 @@ export const userSettingsService = {
         console.error(`Error saving ${service} API key:`, error);
         toast({
           title: 'Error',
-          description: `Failed to save ${service} API key securely`,
+          description: `Failed to save ${service} API key: ${error.message || "Unknown error"}`,
+          variant: 'destructive',
+        });
+        return false;
+      }
+      
+      if (data && data.error) {
+        console.error(`Error from edge function:`, data.error);
+        toast({
+          title: 'Error',
+          description: `Failed to save ${service} API key: ${data.error}`,
           variant: 'destructive',
         });
         return false;
@@ -223,7 +232,7 @@ export const userSettingsService = {
       console.error(`Error saving ${service} API key:`, error);
       toast({
         title: 'Error',
-        description: `Failed to save ${service} API key securely`,
+        description: `Failed to save ${service} API key: ${error.message || "Unknown error"}`,
         variant: 'destructive',
       });
       return false;

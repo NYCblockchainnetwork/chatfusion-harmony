@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,10 +8,13 @@ import { useUserSettings } from '@/hooks/use-user-settings';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { useAuth } from '@/contexts/AuthContext';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 const TelegramAuthSection = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { settings, updateSettings, saveApiKey, getApiKey } = useUserSettings();
   const { user } = useAuth();
   
@@ -54,6 +58,7 @@ const TelegramAuthSection = () => {
         }
       } catch (error) {
         console.error('Error loading Telegram credentials:', error);
+        setErrorMessage("Failed to load saved credentials");
       }
     };
     
@@ -84,23 +89,27 @@ const TelegramAuthSection = () => {
     }
     
     setIsConnecting(true);
+    setErrorMessage(null);
     
     try {
       console.log("Saving Telegram credentials for user:", user.id);
       
       // Store API credentials securely via Edge Function
       const apiIdSaved = await saveApiKey('telegram_api_id', apiId);
+      
+      if (!apiIdSaved) {
+        throw new Error("Failed to save API ID");
+      }
+      
       const apiHashSaved = await saveApiKey('telegram_api_hash', apiHash);
+      
+      if (!apiHashSaved) {
+        throw new Error("Failed to save API Hash");
+      }
       
       console.log("API credentials saved:", { apiIdSaved, apiHashSaved });
       
-      if (!apiIdSaved || !apiHashSaved) {
-        throw new Error("Failed to save API credentials");
-      }
-      
-      // Update user settings to indicate Telegram is connected
-      // Note: This is now handled in the saveApiKey function when both keys are present
-      
+      // Update UI state to show success
       setConnectionStatus('connected');
       
       toast({
@@ -109,9 +118,10 @@ const TelegramAuthSection = () => {
       });
     } catch (error) {
       console.error('Error connecting to Telegram:', error);
+      setErrorMessage(error.message || "Could not connect to Telegram");
       toast({
         title: "Connection Failed",
-        description: error.message || "Could not connect to Telegram",
+        description: error.message || "Failed to save API credentials",
         variant: "destructive"
       });
     } finally {
@@ -141,6 +151,7 @@ const TelegramAuthSection = () => {
       });
       
       setConnectionStatus('disconnected');
+      setErrorMessage(null);
       form.reset(); // Clear the form
       
       toast({
@@ -149,6 +160,7 @@ const TelegramAuthSection = () => {
       });
     } catch (error) {
       console.error('Error disconnecting from Telegram:', error);
+      setErrorMessage("Failed to disconnect from Telegram");
       toast({
         title: "Error",
         description: "Failed to disconnect from Telegram",
@@ -166,6 +178,14 @@ const TelegramAuthSection = () => {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {errorMessage && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
+        
         {connectionStatus === 'connected' ? (
           <div className="space-y-4">
             <div className="bg-green-50 p-3 rounded-md border border-green-200">
