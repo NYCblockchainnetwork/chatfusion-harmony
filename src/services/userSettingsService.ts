@@ -44,8 +44,16 @@ export const userSettingsService = {
     try {
       // When Supabase is connected, this will save to the database
       
+      // First get existing settings to merge with updates
+      let existingSettings = {};
+      const storedSettings = localStorage.getItem(`user_settings_${userId}`);
+      if (storedSettings) {
+        existingSettings = JSON.parse(storedSettings);
+      }
+      
       // Update timestamps
       const updatedSettings = {
+        ...existingSettings,
         ...settings,
         updatedAt: new Date().toISOString(),
       };

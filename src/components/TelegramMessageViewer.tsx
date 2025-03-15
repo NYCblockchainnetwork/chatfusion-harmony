@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,14 +8,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { MessageCircle, Search, User } from "lucide-react";
 import { fetchMessagesFromHandles, TelegramMessage } from '@/utils/telegramMessages';
+import { useUserSettings } from '@/hooks/use-user-settings';
 
 const TelegramMessageViewer = () => {
   const [handleInput, setHandleInput] = useState('');
   const [handles, setHandles] = useState<string[]>([]);
   const [messages, setMessages] = useState<Record<string, TelegramMessage[]>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const { settings, updateSettings } = useUserSettings();
   
-  const addHandle = () => {
+  // Load saved handles when component mounts
+  useEffect(() => {
+    if (settings?.telegramHandles && settings.telegramHandles.length > 0) {
+      setHandles(settings.telegramHandles);
+    }
+  }, [settings]);
+  
+  const addHandle = async () => {
     if (!handleInput.trim()) {
       toast({
         title: "Error",
@@ -40,16 +49,52 @@ const TelegramMessageViewer = () => {
       return;
     }
     
-    setHandles([...handles, cleanHandle]);
+    const newHandles = [...handles, cleanHandle];
+    setHandles(newHandles);
     setHandleInput('');
+    
+    // Save handles to database via userSettings
+    try {
+      await updateSettings({
+        telegramHandles: newHandles
+      });
+      
+      toast({
+        title: "Handle saved",
+        description: `@${cleanHandle} has been saved to your handles list`,
+      });
+    } catch (error) {
+      console.error("Error saving handle:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save handle to database",
+        variant: "destructive"
+      });
+    }
   };
   
-  const removeHandle = (handle: string) => {
-    setHandles(handles.filter(h => h !== handle));
+  const removeHandle = async (handle: string) => {
+    const newHandles = handles.filter(h => h !== handle);
+    setHandles(newHandles);
+    
     // Also remove messages for this handle
     const newMessages = { ...messages };
     delete newMessages[handle];
     setMessages(newMessages);
+    
+    // Update handles in database
+    try {
+      await updateSettings({
+        telegramHandles: newHandles
+      });
+    } catch (error) {
+      console.error("Error removing handle:", error);
+      toast({
+        title: "Error",
+        description: "Failed to remove handle from database",
+        variant: "destructive"
+      });
+    }
   };
   
   const fetchMessages = async () => {
