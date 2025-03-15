@@ -1,18 +1,14 @@
 
-// Note: I don't have access to the current implementation of this file,
-// so I'm reimplementing it using our database-backed approach.
-// Make sure to adjust it if your component has additional functionality.
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import { Phone, Key, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle, AlertTriangle } from "lucide-react";
 
 interface TelegramPhoneVerificationProps {
   onSuccess: (sessionId: string, phone: string) => void;
@@ -20,109 +16,166 @@ interface TelegramPhoneVerificationProps {
 }
 
 const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({ 
-  onSuccess, 
-  onCancel 
+  onSuccess,
+  onCancel
 }) => {
-  const [phone, setPhone] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [phoneCodeHash, setPhoneCodeHash] = useState<string | null>(null);
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [phoneCodeHash, setPhoneCodeHash] = useState("");
+  const [step, setStep] = useState<"phone" | "code">("phone");
   const [isLoading, setIsLoading] = useState(false);
+  const [hasLoadedCredentials, setHasLoadedCredentials] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stage, setStage] = useState<'phone' | 'code'>('phone');
   const { user } = useAuth();
   
-  // Fetch Telegram API credentials from secure Edge Function
-  const fetchApiCredentials = async () => {
-    if (!user?.id) {
-      throw new Error("You must be logged in to use this feature");
+  // Load the API credentials at component mount
+  useEffect(() => {
+    const loadCredentials = async () => {
+      if (!user?.id) return;
+      
+      try {
+        // Try to get secure credentials from the edge function first
+        setIsLoading(true);
+        setError(null);
+        
+        console.log("Fetching Telegram API credentials from edge function");
+        const { data, error } = await supabase.functions.invoke('get-telegram-credentials', {
+          body: { userId: user.id }
+        });
+        
+        if (error) {
+          console.error("Error fetching credentials from edge function:", error);
+          throw new Error(`Failed to get credentials: ${error.message}`);
+        }
+        
+        if (!data || !data.apiId || !data.apiHash) {
+          console.error("Invalid credentials response:", data);
+          throw new Error("Could not retrieve valid Telegram credentials");
+        }
+        
+        // Store in localStorage for this session
+        localStorage.setItem(`telegram_api_id_${user.id}`, data.apiId);
+        localStorage.setItem(`telegram_api_hash_${user.id}`, data.apiHash);
+        
+        console.log("Successfully loaded Telegram API credentials");
+        setHasLoadedCredentials(true);
+      } catch (error) {
+        console.error("Error loading Telegram credentials:", error);
+        setError(`Failed to load Telegram credentials: ${error.message}`);
+        toast({
+          title: "Error",
+          description: "Failed to load Telegram credentials. Please try again.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadCredentials();
+  }, [user?.id]);
+  
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Remove any non-digit characters except for the initial +
+    let value = e.target.value;
+    if (value.charAt(0) !== '+') {
+      value = '+' + value;
     }
     
-    try {
-      const { data, error } = await supabase.functions.invoke('get-telegram-credentials', {
-        body: {
-          userId: user.id
-        }
-      });
-      
-      if (error) throw new Error(error.message);
-      if (!data || !data.apiId || !data.apiHash) {
-        throw new Error("Could not retrieve Telegram API credentials");
-      }
-      
-      // Store temporarily in localStorage
-      localStorage.setItem(`telegram_api_id_${user.id}`, data.apiId);
-      localStorage.setItem(`telegram_api_hash_${user.id}`, data.apiHash);
-      
-      return {
-        apiId: parseInt(data.apiId, 10),
-        apiHash: data.apiHash
-      };
-    } catch (error) {
-      console.error("Error fetching API credentials:", error);
-      throw error;
-    }
+    // Remove any non-digit characters after the + sign
+    value = '+' + value.substring(1).replace(/\D/g, '');
+    
+    setPhone(value);
   };
   
-  const handleRequestCode = async () => {
-    if (!phone) {
-      toast({
-        title: "Error",
-        description: "Phone number is required",
-        variant: "destructive"
-      });
-      return;
+  const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only allow digits
+    const value = e.target.value.replace(/\D/g, '');
+    setCode(value);
+  };
+  
+  const validatePhone = () => {
+    if (!phone || phone.length < 7) {
+      setError("Please enter a valid phone number");
+      return false;
     }
     
+    if (!phone.startsWith('+')) {
+      setError("Phone number must start with a + sign");
+      return false;
+    }
+    
+    return true;
+  };
+  
+  const validateCode = () => {
+    if (!code || code.length < 3) {
+      setError("Please enter the verification code");
+      return false;
+    }
+    
+    return true;
+  };
+
+  const sendVerificationCode = async () => {
+    if (!validatePhone()) return;
     if (!user?.id) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to authenticate with Telegram",
-        variant: "destructive"
-      });
+      setError("User authentication required");
       return;
     }
-    
-    setIsLoading(true);
-    setError(null);
     
     try {
-      // Get API credentials from Edge Function
-      const { apiId, apiHash } = await fetchApiCredentials();
+      setIsLoading(true);
+      setError(null);
       
-      console.log("Sending code to phone:", phone);
+      // Get API credentials from localStorage
+      const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
+      const apiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
       
-      // Call the Edge Function to request verification code
-      const response = await supabase.functions.invoke('telegram-auth/send-code', {
+      if (!apiId || !apiHash) {
+        setError("Telegram API credentials not found");
+        return;
+      }
+
+      console.log(`Sending verification code to ${phone} for user ${user.id}`);
+      
+      // Call the edge function to send the verification code
+      const { data, error } = await supabase.functions.invoke('telegram-auth/send-code', {
         body: {
           phone,
-          apiId,
+          apiId: Number(apiId),
           apiHash,
           userId: user.id
         }
       });
       
-      if (response.error) {
-        throw new Error(response.error);
-      }
+      console.log("Response from send-code:", data, error);
       
-      const data = response.data;
+      if (error) {
+        console.error("Error from edge function:", error);
+        throw new Error(`Failed to send verification code: ${error}`);
+      }
       
       if (!data || !data.success || !data.phoneCodeHash) {
-        throw new Error(data?.error?.details || data?.error || "Failed to send verification code");
+        console.error("Invalid response from edge function:", data);
+        throw new Error("Failed to get verification code hash");
       }
       
-      // Store the phoneCodeHash for verification
+      // Store the phoneCodeHash
       setPhoneCodeHash(data.phoneCodeHash);
-      setStage('code');
+      
+      // Move to the code verification step
+      setStep("code");
       
       toast({
         title: "Code Sent",
-        description: "Please check your Telegram app for the verification code",
+        description: "Verification code has been sent to your phone",
       });
-      
     } catch (error) {
-      console.error("Error sending code:", error);
-      setError(error.message || "Failed to send verification code");
+      console.error("Error sending verification code:", error);
+      
+      setError(`Error: ${error.message}`);
+      
       toast({
         title: "Error",
         description: error.message || "Failed to send verification code",
@@ -133,74 +186,80 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
     }
   };
   
-  const handleVerifyCode = async () => {
-    if (!verificationCode || !phoneCodeHash) {
-      toast({
-        title: "Error",
-        description: "Verification code is required",
-        variant: "destructive"
-      });
+  const verifyCode = async () => {
+    if (!validateCode()) return;
+    if (!phoneCodeHash) {
+      setError("Session expired. Please request a new code.");
       return;
     }
-    
     if (!user?.id) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to authenticate with Telegram",
-        variant: "destructive"
-      });
+      setError("User authentication required");
       return;
     }
-    
-    setIsLoading(true);
-    setError(null);
     
     try {
-      // Get API credentials (they should be in localStorage from the previous step)
+      setIsLoading(true);
+      setError(null);
+      
+      // Get API credentials from localStorage
       const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
       const apiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
       
       if (!apiId || !apiHash) {
-        throw new Error("Telegram API credentials not found");
+        setError("Telegram API credentials not found");
+        return;
       }
       
-      console.log("Verifying code for phone:", phone);
+      console.log(`Verifying code for ${phone}, user ${user.id}`);
       
-      // Call the Edge Function to verify the code
-      const response = await supabase.functions.invoke('telegram-auth/verify-code', {
+      // Call the edge function to verify the code
+      const { data, error } = await supabase.functions.invoke('telegram-auth/verify-code', {
         body: {
           phone,
-          code: verificationCode,
+          code,
           phoneCodeHash,
-          apiId: parseInt(apiId, 10),
+          apiId: Number(apiId),
           apiHash,
           userId: user.id
         }
       });
       
-      if (response.error) {
-        throw new Error(response.error);
+      console.log("Response from verify-code:", data, error);
+      
+      if (error) {
+        console.error("Error from edge function:", error);
+        throw new Error(`Failed to verify code: ${error}`);
       }
       
-      const data = response.data;
-      
-      if (!data || !data.success) {
-        throw new Error(data?.error?.details || data?.error || "Failed to verify code");
+      if (!data || !data.success || !data.sessionId) {
+        console.error("Invalid response from edge function:", data);
+        throw new Error("Failed to create Telegram session");
       }
       
-      // Call the onSuccess callback with the session ID and phone
+      // Notify parent component of successful verification
       onSuccess(data.sessionId, phone);
       
       toast({
-        title: "Success",
-        description: "Telegram authenticated successfully!",
+        title: "Authentication Successful",
+        description: "Your Telegram account has been connected",
       });
-      
     } catch (error) {
       console.error("Error verifying code:", error);
-      setError(error.message || "Failed to verify code");
+      
+      setError(`Error: ${error.message}`);
+      
+      // Check for specific error messages
+      if (error.message.includes("PHONE_CODE_INVALID")) {
+        setError("Invalid verification code. Please check and try again.");
+      } else if (error.message.includes("PHONE_CODE_EXPIRED")) {
+        setError("Verification code has expired. Please request a new code.");
+        setStep("phone");
+      } else if (error.message.includes("SESSION_PASSWORD_NEEDED")) {
+        setError("This account requires a password (2FA). Please use another account or disable 2FA in Telegram.");
+      }
+      
       toast({
-        title: "Error",
+        title: "Verification Failed",
         description: error.message || "Failed to verify code",
         variant: "destructive"
       });
@@ -209,99 +268,149 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
     }
   };
   
-  const renderPhoneInput = () => (
-    <>
-      <CardHeader>
-        <CardTitle>Connect Telegram</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="phone">Your Telegram Phone Number</Label>
-          <Input
-            id="phone"
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+1234567890"
-            disabled={isLoading}
-          />
-          <p className="text-sm text-muted-foreground">
-            Enter the phone number associated with your Telegram account, including the country code.
-          </p>
-        </div>
-        
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-      </CardContent>
-      <CardFooter className="flex justify-between">
-        <Button variant="ghost" onClick={onCancel} disabled={isLoading}>
-          Cancel
-        </Button>
-        <Button onClick={handleRequestCode} disabled={isLoading || !phone}>
-          {isLoading ? "Sending..." : "Send Code"}
-        </Button>
-      </CardFooter>
-    </>
-  );
+  const goBackToPhone = () => {
+    setStep("phone");
+    setCode("");
+    setPhoneCodeHash("");
+    setError(null);
+  };
   
-  const renderCodeInput = () => (
-    <>
-      <CardHeader>
-        <CardTitle>Enter Verification Code</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="code">Verification Code</Label>
-          <Input
-            id="code"
-            type="text"
-            value={verificationCode}
-            onChange={(e) => setVerificationCode(e.target.value)}
-            placeholder="12345"
-            disabled={isLoading}
-            maxLength={5}
-          />
-          <p className="text-sm text-muted-foreground">
-            Enter the verification code sent to your Telegram app.
-          </p>
-        </div>
-        
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-      </CardContent>
-      <CardFooter className="flex justify-between">
-        <Button 
-          variant="ghost" 
-          onClick={() => {
-            setStage('phone');
-            setVerificationCode('');
-            setPhoneCodeHash(null);
-            setError(null);
-          }} 
-          disabled={isLoading}
-        >
-          Back
-        </Button>
-        <Button onClick={handleVerifyCode} disabled={isLoading || !verificationCode}>
-          {isLoading ? "Verifying..." : "Verify Code"}
-        </Button>
-      </CardFooter>
-    </>
-  );
+  if (isLoading && !hasLoadedCredentials) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Connecting to Telegram</CardTitle>
+          <CardDescription>Loading API credentials...</CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center items-center p-6">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
   
+  if (error && !hasLoadedCredentials) {
+    return (
+      <Card className="border-red-200 bg-red-50">
+        <CardHeader>
+          <CardTitle className="text-red-700 flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            Telegram Connection Error
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-red-800 mb-4">
+            Failed to load Telegram API credentials. This may be due to a server configuration issue.
+          </p>
+          <div className="bg-white p-3 rounded border border-red-200 overflow-auto max-h-32 text-xs text-gray-800 font-mono">
+            {error}
+          </div>
+        </CardContent>
+        <CardFooter>
+          <Button onClick={onCancel} className="w-full">
+            Cancel
+          </Button>
+        </CardFooter>
+      </Card>
+    );
+  }
+
   return (
-    <Card className="w-full">
-      {stage === 'phone' ? renderPhoneInput() : renderCodeInput()}
+    <Card>
+      <CardHeader>
+        <CardTitle>Connect to Telegram</CardTitle>
+        <CardDescription>
+          {step === "phone" ? 
+            "Enter your phone number to receive a verification code" : 
+            "Enter the verification code sent to your phone"
+          }
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>
+              {error}
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {step === "phone" ? (
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Phone Number</span>
+            </div>
+            <Input
+              type="tel"
+              placeholder="+1234567890"
+              value={phone}
+              onChange={handlePhoneChange}
+              className="w-full"
+              disabled={isLoading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Enter your phone number including country code (e.g., +1 for US).
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Key className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Verification Code</span>
+            </div>
+            <Input
+              type="text"
+              placeholder="12345"
+              value={code}
+              onChange={handleCodeChange}
+              className="w-full"
+              disabled={isLoading}
+              maxLength={7}
+            />
+            <p className="text-xs text-muted-foreground">
+              Enter the verification code sent to {phone}
+            </p>
+          </div>
+        )}
+      </CardContent>
+      <CardFooter className="flex justify-between">
+        {step === "phone" ? (
+          <>
+            <Button variant="outline" onClick={onCancel} disabled={isLoading}>
+              Cancel
+            </Button>
+            <Button onClick={sendVerificationCode} disabled={isLoading || !phone}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                "Send Code"
+              )}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="outline" onClick={goBackToPhone} disabled={isLoading}>
+              Back
+            </Button>
+            <Button onClick={verifyCode} disabled={isLoading || !code}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                "Verify"
+              )}
+            </Button>
+          </>
+        )}
+      </CardFooter>
     </Card>
   );
 };
