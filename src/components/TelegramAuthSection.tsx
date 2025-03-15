@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -29,7 +28,6 @@ const TelegramAuthSection = () => {
     },
   });
 
-  // Fetch telegram sessions from database
   const fetchTelegramSessions = async () => {
     if (!user?.id) return;
     
@@ -43,7 +41,6 @@ const TelegramAuthSection = () => {
       if (data && data.length > 0) {
         setConnectionStatus('connected');
         
-        // Set API credentials in form if they exist in localStorage
         const storedApiId = localStorage.getItem(`telegram_api_id_${user.id}`);
         const storedApiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
         
@@ -104,18 +101,30 @@ const TelegramAuthSection = () => {
     try {
       console.log("Fetching Telegram credentials from Supabase Edge Function");
       
-      // Call Supabase Edge Function to get secure credentials
+      const { data: sessionData } = await supabase.auth.getSession();
+      
+      if (!sessionData.session) {
+        throw new Error("No active session. Please log in again.");
+      }
+      
       const { data, error } = await supabase.functions.invoke('get-telegram-credentials', {
-        body: { userId: user.id }
+        body: { userId: user.id },
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`
+        }
       });
       
       if (error) {
+        console.error("Error from edge function:", error);
         throw new Error(`Failed to get credentials: ${error.message}`);
       }
       
       if (!data || !data.apiId || !data.apiHash) {
+        console.error("Invalid response from edge function:", data);
         throw new Error("Could not retrieve valid Telegram credentials");
       }
+      
+      console.log("Retrieved credentials from edge function");
       
       const apiIdResult = await saveApiKeyToLocalStorage('telegram_api_id', data.apiId);
       if (!apiIdResult) {
@@ -127,7 +136,6 @@ const TelegramAuthSection = () => {
         throw new Error("Failed to save API Hash");
       }
       
-      // Show the phone verification UI
       setShowPhoneVerification(true);
       
     } catch (error) {
@@ -177,7 +185,6 @@ const TelegramAuthSection = () => {
         throw new Error("Failed to save API Hash");
       }
       
-      // Show the phone verification UI
       setShowPhoneVerification(true);
       
     } catch (error) {
@@ -204,7 +211,6 @@ const TelegramAuthSection = () => {
     
     try {
       if (sessionId) {
-        // Delete specific session
         const { error } = await telegramClient.deleteSession(sessionId);
         
         if (error) throw error;
@@ -214,12 +220,10 @@ const TelegramAuthSection = () => {
           description: "The selected Telegram session has been removed",
         });
       } else {
-        // Delete all sessions
         for (const session of telegramSessions) {
           await telegramClient.deleteSession(session.id);
         }
         
-        // Clear local storage as well
         localStorage.removeItem(`telegram_api_id_${user.id}`);
         localStorage.removeItem(`telegram_api_hash_${user.id}`);
         
@@ -229,12 +233,10 @@ const TelegramAuthSection = () => {
         });
       }
       
-      // Update settings
       await updateSettings({
         telegramIntegrationEnabled: false,
       });
       
-      // Refresh session list
       await fetchTelegramSessions();
       
     } catch (error) {
@@ -249,14 +251,12 @@ const TelegramAuthSection = () => {
   };
   
   const handleVerificationSuccess = (sessionId: string, phone: string) => {
-    // Update settings
     updateSettings({
       telegramIntegrationEnabled: true,
       telegramHandles: settings?.telegramHandles || [],
       activeSessionId: sessionId
     });
     
-    // Refresh session list
     fetchTelegramSessions();
     
     setShowPhoneVerification(false);
