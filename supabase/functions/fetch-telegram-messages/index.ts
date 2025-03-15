@@ -29,13 +29,13 @@ async function fetchMessagesUsingMTProto(credentials: {
   apiId: number;
   apiHash: string;
   sessionString?: string;
-}, handle: string, limit: number = 5): Promise<{ messages: TelegramMessage[] }> {
+}, handle: string, limit: number = 5): Promise<{ messages: TelegramMessage[], sessionString?: string }> {
   try {
     console.log(`Attempting to fetch real messages for handle: ${handle} using MTProto API`);
     
-    // Import the Telegram library - we use the npm version through esm.sh
-    const { TelegramClient } = await import("https://esm.sh/telegram@2.26.0");
-    const { StringSession } = await import("https://esm.sh/telegram@2.26.0/sessions");
+    // Import the GramJS library - Deno compatible version of Telegram client
+    const { TelegramClient } = await import("https://deno.land/x/gramjs@v2.19.6/mod.ts");
+    const { StringSession } = await import("https://deno.land/x/gramjs@v2.19.6/sessions/mod.ts");
     
     // Initialize the client with user credentials
     const stringSession = new StringSession(credentials.sessionString || "");
