@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import Header from '@/components/Header';
@@ -22,19 +21,16 @@ const Settings = () => {
   const [validationMessage, setValidationMessage] = useState('');
   
   useEffect(() => {
-    // Load saved credentials if available
     const loadSavedCredentials = async () => {
       if (!user?.id) return;
       
       try {
-        // Try to load from localStorage first for quick UI rendering
         const storedApiId = localStorage.getItem(`telegram_api_id_${user.id}`);
         const storedApiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
         
         if (storedApiId) setApiId(storedApiId);
         if (storedApiHash) setApiHash(storedApiHash);
         
-        // Then try to load from Supabase for more secure storage
         const { data: sessionData } = await supabase.auth.getSession();
         
         if (!sessionData.session) {
@@ -115,7 +111,6 @@ const Settings = () => {
           description: "Telegram credentials validated successfully",
         });
         
-        // Save to localStorage for quick access
         if (user?.id) {
           localStorage.setItem(`telegram_api_id_${user.id}`, apiId);
           localStorage.setItem(`telegram_api_hash_${user.id}`, apiHash);
@@ -124,10 +119,10 @@ const Settings = () => {
     } catch (error) {
       console.error("Error validating credentials:", error);
       setValidationStatus('error');
-      setValidationMessage(error.message || "Failed to validate credentials");
+      setValidationMessage(error instanceof Error ? error.message : "Failed to validate credentials");
       toast({
         title: "Validation Error",
-        description: error.message || "Failed to validate credentials",
+        description: error instanceof Error ? error.message : "Failed to validate credentials",
         variant: "destructive"
       });
     } finally {
@@ -188,7 +183,7 @@ const Settings = () => {
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Integration Error</AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
+                    <AlertDescription>{error instanceof Error ? error.message : String(error)}</AlertDescription>
                   </Alert>
                 )}
                 
