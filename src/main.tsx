@@ -25,16 +25,16 @@ if (typeof window !== 'undefined' && typeof Buffer === 'undefined') {
     copy() { return 0; }
     slice() { return new BufferPolyfill(new Uint8Array(0)); }
     toString() { return ''; }
+    
+    // Define static methods directly on the class
+    static from(data: any): any {
+      return new BufferPolyfill(data);
+    }
+    
+    static isBuffer(obj: any): obj is Buffer {
+      return obj instanceof BufferPolyfill;
+    }
   }
-  
-  // Create static methods that conform to TypeScript expectations
-  BufferPolyfill.from = function(data: any): any {
-    return new BufferPolyfill(data);
-  };
-  
-  BufferPolyfill.isBuffer = function(obj: any): obj is Buffer {
-    return obj instanceof BufferPolyfill;
-  };
   
   // @ts-ignore - Apply our polyfill to the window object
   window.Buffer = BufferPolyfill;
