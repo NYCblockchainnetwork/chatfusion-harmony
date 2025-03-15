@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 import { toast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
 
 type User = {
   id: string;
@@ -48,6 +49,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     script.async = true;
     script.defer = true;
     script.onload = () => {
+      console.log('Google Sign-In script loaded successfully');
       setGoogleScriptLoaded(true);
     };
     script.onerror = (error) => {
@@ -76,12 +78,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
+      console.log('Initializing Google Sign-In');
       window.google?.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: handleGoogleCredentialResponse,
         auto_select: false,
         cancel_on_tap_outside: true,
       });
+      console.log('Google Sign-In initialized successfully');
       setAuthInitialized(true);
       setIsLoading(false);
     } catch (error) {
@@ -95,6 +99,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [googleScriptLoaded]);
 
+  // Check authentication status on load
+  useEffect(() => {
+    const checkAuthStatus = () => {
+      if (user) {
+        console.log('User is already authenticated:', user.name);
+      }
+      setIsLoading(false);
+    };
+    
+    checkAuthStatus();
+  }, [user]);
+
   const handleGoogleCredentialResponse = (response: any) => {
     try {
       if (!response?.credential) {
@@ -107,6 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      console.log('Google authentication successful, processing credentials');
       // Decode the JWT token to get user information
       const decodedToken = decodeJwtResponse(response.credential);
       const googleUser: User = {
@@ -117,10 +134,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       setUser(googleUser);
+      console.log('User successfully authenticated:', googleUser.name);
       toast({
         title: "Authentication Successful",
         description: `Signed in as ${googleUser.name}`,
       });
+      
+      // Force a navigation update after setting the user
+      setIsLoading(false);
+      
+      // We don't need to manually navigate here, it will be handled by AuthGuard
     } catch (error) {
       console.error('Error processing Google credentials:', error);
       toast({
@@ -149,6 +172,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async () => {
     return new Promise<void>((resolve, reject) => {
       try {
+        console.log('Initiating Google login flow');
         setIsLoading(true);
         
         if (!window.google || !authInitialized || !GOOGLE_CLIENT_ID) {
@@ -194,7 +218,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else {
             // This means the prompt is being shown to the user
             // The result will come through the callback function above
-            setIsLoading(false);
+            console.log('Google login prompt is being shown to the user');
             resolve();
           }
         });
@@ -221,6 +245,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     buttonContainer.innerHTML = '';
     
     try {
+      console.log('Rendering Google button');
       window.google.accounts.id.renderButton(buttonContainer, {
         theme: 'outline',
         size: 'large',
@@ -235,6 +260,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    console.log('Logging out user');
     setUser(null);
     if (window.google) {
       window.google.accounts.id.disableAutoSelect();
