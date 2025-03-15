@@ -34,6 +34,7 @@ export async function validateTelegramCredentials(
     }
     
     if (!data.valid) {
+      console.error("Invalid credentials response:", data);
       return { valid: false, message: data.error || "Invalid credentials" };
     }
     

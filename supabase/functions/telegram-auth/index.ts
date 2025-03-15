@@ -39,13 +39,17 @@ serve(async (req) => {
         
         try {
           console.log("Validating Telegram credentials...");
+          // Make sure we're using an empty StringSession
           const stringSession = new StringSession("");
+          
+          // Create the client with proper configuration for web environments
           const client = new TelegramClient(stringSession, parseInt(apiId, 10), apiHash, {
             connectionRetries: 2,
             useWSS: true,
             timeout: 10000
           });
           
+          // Test connecting to Telegram servers
           await client.connect();
           console.log("Successfully connected to Telegram with provided credentials");
           await client.disconnect();
@@ -94,11 +98,11 @@ serve(async (req) => {
             valid: true, 
             message: "Credentials valid and successfully connected to Telegram" 
           });
-        } catch (validationError) {
-          console.error("Error validating credentials:", validationError);
+        } catch (validationErr) {
+          console.error("Error validating credentials:", validationErr);
           return createResponse({
             valid: false,
-            error: validationError.message || "Invalid credentials"
+            error: validationErr.message || "Invalid credentials"
           }, 400);
         }
 
