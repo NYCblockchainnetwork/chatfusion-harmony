@@ -1,9 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import HandleInput from './telegram/HandleInput';
 import HandleList from './telegram/HandleList';
 import MessageDisplay from './telegram/MessageDisplay';
+import TelegramPhoneVerification from './telegram/TelegramPhoneVerification';
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { toast } from "@/hooks/use-toast";
@@ -14,11 +15,12 @@ const TelegramMessageViewer = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Record<string, any>>({});
   const [isMockMode, setIsMockMode] = useState(false);
+  const [needsAuth, setNeedsAuth] = useState(false);
   const { user } = useAuth();
   const { settings, updateSettings } = useUserSettings();
   
   // Load existing handles from settings
-  React.useEffect(() => {
+  useEffect(() => {
     if (settings?.telegramHandles && settings.telegramHandles.length > 0) {
       setHandles(settings.telegramHandles);
     }
@@ -69,7 +71,7 @@ const TelegramMessageViewer = () => {
     });
   };
   
-  const fetchMessages = async () => {
+  const fetchMessages = async (sessionString?: string) => {
     if (handles.length === 0) {
       toast({
         title: "No Handles",
@@ -80,6 +82,7 @@ const TelegramMessageViewer = () => {
     }
     
     setIsLoading(true);
+    setNeedsAuth(false);
     
     try {
       if (!user?.id) {
@@ -97,7 +100,9 @@ const TelegramMessageViewer = () => {
       // Get stored API credentials from localStorage
       const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
       const apiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
-      const sessionString = localStorage.getItem(`telegram_session_${user.id}`);
+      
+      // Use provided session string or get from localStorage
+      const sessionStringToUse = sessionString || localStorage.getItem(`telegram_session_${user.id}`);
       
       if (!apiId || !apiHash) {
         toast({
@@ -116,7 +121,8 @@ const TelegramMessageViewer = () => {
           limit: 5,
           apiId: apiId ? parseInt(apiId, 10) : undefined,
           apiHash,
-          sessionString
+          sessionString: sessionStringToUse,
+          phone: user.phone // If we have user's phone in the auth context
         }
       });
       
@@ -125,6 +131,12 @@ const TelegramMessageViewer = () => {
       }
       
       if (data.error) {
+        // Check if we need authentication
+        if (data.needsAuth) {
+          console.log("Authentication required for Telegram");
+          setNeedsAuth(true);
+          throw new Error("Telegram authentication required");
+        }
         throw new Error(data.error);
       }
       
@@ -155,14 +167,30 @@ const TelegramMessageViewer = () => {
       });
     } catch (error) {
       console.error("Error fetching messages:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to fetch messages",
-        variant: "destructive"
-      });
+      
+      // Only show toast if it's not due to auth requirement
+      if (!needsAuth) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to fetch messages",
+          variant: "destructive"
+        });
+      }
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  // Handle successful phone verification
+  const handleVerificationSuccess = (sessionString: string) => {
+    setNeedsAuth(false);
+    // Fetch messages with the new session string
+    fetchMessages(sessionString);
+  };
+  
+  // Cancel verification
+  const handleVerificationCancel = () => {
+    setNeedsAuth(false);
   };
 
   return (
@@ -178,25 +206,34 @@ const TelegramMessageViewer = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {isMockMode && (
-          <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
-            <p className="text-sm text-amber-800">
-              Using mock Telegram data. The Telegram API client may have encountered an error or the credentials may be invalid.
-              Check the console logs for more details.
-            </p>
-          </div>
+        {needsAuth ? (
+          <TelegramPhoneVerification
+            onSuccess={handleVerificationSuccess}
+            onCancel={handleVerificationCancel}
+          />
+        ) : (
+          <>
+            {isMockMode && (
+              <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
+                <p className="text-sm text-amber-800">
+                  Using mock Telegram data. The Telegram API client may have encountered an error or the credentials may be invalid.
+                  Check the console logs for more details.
+                </p>
+              </div>
+            )}
+            
+            <HandleInput onAddHandle={handleAddHandle} />
+            
+            <HandleList 
+              handles={handles} 
+              onRemoveHandle={handleRemoveHandle} 
+              onFetchMessages={() => fetchMessages()} 
+              isLoading={isLoading}
+            />
+            
+            <MessageDisplay messages={messages} isMockMode={isMockMode} />
+          </>
         )}
-        
-        <HandleInput onAddHandle={handleAddHandle} />
-        
-        <HandleList 
-          handles={handles} 
-          onRemoveHandle={handleRemoveHandle} 
-          onFetchMessages={fetchMessages} 
-          isLoading={isLoading}
-        />
-        
-        <MessageDisplay messages={messages} isMockMode={isMockMode} />
       </CardContent>
     </Card>
   );

@@ -12,6 +12,7 @@ interface TelegramRequest {
   apiId?: number;
   apiHash?: string;
   sessionString?: string;
+  phone?: string;
 }
 
 interface TelegramMessage {
@@ -45,7 +46,7 @@ async function fetchRealTelegramMessages(
   apiId: number, 
   apiHash: string,
   sessionString: string
-): Promise<Record<string, TelegramMessage[]>> {
+): Promise<{result: Record<string, TelegramMessage[]>, newSessionString: string}> {
   const result: Record<string, TelegramMessage[]> = {};
   
   try {
@@ -107,9 +108,9 @@ async function fetchRealTelegramMessages(
     console.log("Disconnected from Telegram API");
     
     return { result, newSessionString };
-  } catch (importError) {
-    console.error("Error importing or using grm library:", importError);
-    throw new Error(`Failed to use Telegram client: ${importError.message}`);
+  } catch (error) {
+    console.error("Error importing or using grm library:", error);
+    throw new Error(`Failed to use Telegram client: ${error.message}`);
   }
 }
 
@@ -120,7 +121,7 @@ serve(async (req) => {
   }
 
   try {
-    const { handles, limit = 5, apiId, apiHash, sessionString = "" } = await req.json() as TelegramRequest;
+    const { handles, limit = 5, apiId, apiHash, sessionString = "", phone } = await req.json() as TelegramRequest;
     
     // Validate inputs
     if (!handles || !Array.isArray(handles) || handles.length === 0) {
@@ -133,11 +134,45 @@ serve(async (req) => {
     // Check for API credentials
     const apiIdToUse = apiId || Number(Deno.env.get("telegram_api_id"));
     const apiHashToUse = apiHash || Deno.env.get("telegram_api_hash");
+    let sessionStringToUse = sessionString;
+
+    // If phone is provided and no session string, try to get it from stored sessions
+    if (phone && !sessionStringToUse) {
+      console.log(`Attempting to retrieve stored session for phone: ${phone}`);
+      try {
+        // In a production app, you would retrieve this from a database
+        // This is a simplification
+        const storedSession = Deno.env.get(`telegram_session_${phone.replace(/[^0-9]/g, '')}`);
+        if (storedSession) {
+          console.log("Found stored session for this phone number");
+          sessionStringToUse = storedSession;
+        } else {
+          console.log("No stored session found for this phone number");
+        }
+      } catch (sessionError) {
+        console.error("Error retrieving session:", sessionError);
+      }
+    }
 
     if (!apiIdToUse || !apiHashToUse) {
       console.error("Missing Telegram API credentials");
       return new Response(
-        JSON.stringify({ error: "Telegram API credentials not found" }),
+        JSON.stringify({ 
+          error: "Telegram API credentials not found",
+          needsAuth: true 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if we have a valid session string
+    if (!sessionStringToUse) {
+      console.error("Missing Telegram session string");
+      return new Response(
+        JSON.stringify({ 
+          error: "Telegram session string not found",
+          needsAuth: true 
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -151,10 +186,18 @@ serve(async (req) => {
         limit, 
         apiIdToUse, 
         apiHashToUse, 
-        sessionString
+        sessionStringToUse
       );
       
       console.log("Successfully fetched real messages from Telegram API");
+      
+      // If we have a phone number and a new session string, store it
+      if (phone && newSessionString !== sessionStringToUse) {
+        console.log("Storing updated session string");
+        // In a production app, you would store this in a database
+        // This is a simplification for the example
+        // Deno.env.set(`telegram_session_${phone.replace(/[^0-9]/g, '')}`, newSessionString);
+      }
       
       // Return the results with real data
       return new Response(
@@ -173,6 +216,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           error: `Telegram API Error: ${telegramError.message}`,
+          needsAuth: telegramError.message.includes("auth") || telegramError.message.includes("session"),
           details: "Please check your API credentials and session string"
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
