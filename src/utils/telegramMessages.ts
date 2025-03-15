@@ -36,13 +36,36 @@ export async function fetchMessagesFromHandles(
     const apiHash = localStorage.getItem(`telegram_api_hash_${userId}`);
     const sessionString = localStorage.getItem(`telegram_session_${userId}`);
 
-    console.log("Retrieved Telegram credentials:", { 
+    console.log("Retrieved Telegram credentials from localStorage:", { 
       apiId: apiId ? "exists" : "missing", 
       apiHash: apiHash ? "exists" : "missing",
       sessionString: sessionString ? "exists" : "missing"
     });
 
     if (!apiId || !apiHash) {
+      console.error("Telegram API credentials not found in localStorage. Keys checked:", 
+        `telegram_api_id_${userId}`, `telegram_api_hash_${userId}`);
+      
+      // Check if we have values in the non-prefixed keys (for backward compatibility)
+      const fallbackApiId = localStorage.getItem('telegram_api_id');
+      const fallbackApiHash = localStorage.getItem('telegram_api_hash');
+      
+      if (fallbackApiId && fallbackApiHash) {
+        console.log("Found credentials in non-prefixed localStorage keys, migrating to user-specific keys");
+        localStorage.setItem(`telegram_api_id_${userId}`, fallbackApiId);
+        localStorage.setItem(`telegram_api_hash_${userId}`, fallbackApiHash);
+        
+        // Continue with these credentials
+        const credentials: TelegramCredentials = {
+          apiId: parseInt(fallbackApiId, 10),
+          apiHash: fallbackApiHash,
+          sessionString: sessionString || undefined
+        };
+        
+        console.log("Using fallback credentials with API ID:", credentials.apiId);
+        return await processTelegramFetch(credentials, handles, limit, userId);
+      }
+      
       throw new Error("Telegram API credentials not found. Please set up Telegram integration first.");
     }
 
@@ -53,7 +76,27 @@ export async function fetchMessagesFromHandles(
       sessionString: sessionString || undefined
     };
 
-    console.log("Creating Telegram client with ID:", credentials.apiId);
+    console.log("Creating Telegram client with API ID:", credentials.apiId);
+    return await processTelegramFetch(credentials, handles, limit, userId);
+    
+  } catch (error) {
+    console.error("Error in fetchMessagesFromHandles:", error);
+    toast({
+      title: "Error",
+      description: error.message || "Could not fetch Telegram messages",
+      variant: "destructive"
+    });
+    return {};
+  }
+}
+
+async function processTelegramFetch(
+  credentials: TelegramCredentials, 
+  handles: string[], 
+  limit: number,
+  userId: string
+): Promise<Record<string, TelegramMessage[]>> {
+  try {
     const { client, stringSession } = await createTelegramClient(credentials);
     
     console.log("Connecting to Telegram API...");
@@ -64,7 +107,7 @@ export async function fetchMessagesFromHandles(
       
       // Save the session string for future use if it changed
       const newSessionString = stringSession.save();
-      if (newSessionString !== sessionString) {
+      if (newSessionString !== credentials.sessionString) {
         console.log("Saving new session string to localStorage");
         localStorage.setItem(`telegram_session_${userId}`, newSessionString);
       }
@@ -140,12 +183,7 @@ export async function fetchMessagesFromHandles(
     console.log("Completed fetching messages for all handles:", Object.keys(result));
     return result;
   } catch (error) {
-    console.error("Error in fetchMessagesFromHandles:", error);
-    toast({
-      title: "Error",
-      description: error.message || "Could not fetch Telegram messages",
-      variant: "destructive"
-    });
-    return {};
+    console.error("Error in processTelegramFetch:", error);
+    throw error;
   }
 }

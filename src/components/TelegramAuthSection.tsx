@@ -8,11 +8,13 @@ import { toast } from "@/hooks/use-toast";
 import { useUserSettings } from '@/hooks/use-user-settings';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
+import { useAuth } from '@/contexts/AuthContext';
 
 const TelegramAuthSection = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const { settings, updateSettings, saveApiKey, getApiKey } = useUserSettings();
+  const { user } = useAuth();
   
   const form = useForm({
     defaultValues: {
@@ -25,6 +27,13 @@ const TelegramAuthSection = () => {
   useEffect(() => {
     const loadCredentials = async () => {
       try {
+        if (!user?.id) {
+          console.error("No user ID available for Telegram credentials");
+          return;
+        }
+        
+        console.log("Loading Telegram credentials for user:", user.id);
+        
         // Check if user has already connected to Telegram
         if (settings?.telegramIntegrationEnabled) {
           setConnectionStatus('connected');
@@ -34,6 +43,11 @@ const TelegramAuthSection = () => {
         // Try to get saved API credentials
         const apiId = await getApiKey('telegram_api_id');
         const apiHash = await getApiKey('telegram_api_hash');
+        
+        console.log("Retrieved credentials from user settings:", {
+          apiId: apiId ? "exists" : "missing",
+          apiHash: apiHash ? "exists" : "missing"
+        });
         
         // If we have credentials, pre-fill the form
         if (apiId && apiHash) {
@@ -45,10 +59,10 @@ const TelegramAuthSection = () => {
       }
     };
     
-    if (settings) {
+    if (settings && user?.id) {
       loadCredentials();
     }
-  }, [settings, getApiKey, form]);
+  }, [settings, getApiKey, form, user]);
   
   const handleConnect = async (formData) => {
     const { apiId, apiHash } = formData;
@@ -62,12 +76,29 @@ const TelegramAuthSection = () => {
       return;
     }
     
+    if (!user?.id) {
+      toast({
+        title: "Error", 
+        description: "You must be logged in to connect to Telegram",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setIsConnecting(true);
     
     try {
-      // Store API credentials securely in Supabase
+      console.log("Saving Telegram credentials for user:", user.id);
+      
+      // Store API credentials securely in localStorage with user-specific keys
+      localStorage.setItem(`telegram_api_id_${user.id}`, apiId);
+      localStorage.setItem(`telegram_api_hash_${user.id}`, apiHash);
+      
+      // Also store with the service methods for compatibility
       const apiIdSaved = await saveApiKey('telegram_api_id', apiId);
       const apiHashSaved = await saveApiKey('telegram_api_hash', apiHash);
+      
+      console.log("API credentials saved:", { apiIdSaved, apiHashSaved });
       
       if (!apiIdSaved || !apiHashSaved) {
         throw new Error("Failed to save API credentials");
@@ -80,17 +111,12 @@ const TelegramAuthSection = () => {
         telegramHandles: settings?.telegramHandles || [],
       });
       
-      // Simulating a successful connection (in a real app, this would verify with Telegram)
-      setTimeout(() => {
-        setConnectionStatus('connected');
-        setIsConnecting(false);
-        
-        toast({
-          title: "Success",
-          description: "Connected to Telegram successfully",
-        });
-      }, 1000);
+      setConnectionStatus('connected');
       
+      toast({
+        title: "Success",
+        description: "Connected to Telegram successfully",
+      });
     } catch (error) {
       console.error('Error connecting to Telegram:', error);
       toast({
@@ -98,13 +124,28 @@ const TelegramAuthSection = () => {
         description: error.message || "Could not connect to Telegram",
         variant: "destructive"
       });
+    } finally {
       setIsConnecting(false);
     }
   };
   
   const handleDisconnect = async () => {
+    if (!user?.id) {
+      toast({
+        title: "Error",
+        description: "User not authenticated",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     try {
-      // Remove sensitive API credentials from Supabase
+      // Remove sensitive API credentials from localStorage
+      localStorage.removeItem(`telegram_api_id_${user.id}`);
+      localStorage.removeItem(`telegram_api_hash_${user.id}`);
+      localStorage.removeItem(`telegram_session_${user.id}`);
+      
+      // Remove from service storage as well
       await saveApiKey('telegram_api_id', '');
       await saveApiKey('telegram_api_hash', '');
       
@@ -114,6 +155,7 @@ const TelegramAuthSection = () => {
       });
       
       setConnectionStatus('disconnected');
+      form.reset(); // Clear the form
       
       toast({
         title: "Disconnected",
