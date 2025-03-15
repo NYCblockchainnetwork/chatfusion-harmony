@@ -1,5 +1,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.5.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +12,8 @@ interface TelegramRequest {
   limit?: number;
   apiId?: number;
   apiHash?: string;
-  sessionString?: string;
+  userId: string;
+  sessionId?: string;
   phone?: string;
 }
 
@@ -38,6 +40,10 @@ function createErrorMessage(handle: string, error: string): TelegramMessage {
     }
   };
 }
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Function to connect to Telegram and fetch real messages
 async function fetchRealTelegramMessages(
@@ -121,7 +127,7 @@ serve(async (req) => {
   }
 
   try {
-    const { handles, limit = 5, apiId, apiHash, sessionString = "", phone } = await req.json() as TelegramRequest;
+    const { handles, limit = 5, apiId, apiHash, userId, sessionId, phone } = await req.json() as TelegramRequest;
     
     // Validate inputs
     if (!handles || !Array.isArray(handles) || handles.length === 0) {
@@ -131,29 +137,17 @@ serve(async (req) => {
       );
     }
 
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: "User ID is required" }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Check for API credentials
     const apiIdToUse = apiId || Number(Deno.env.get("telegram_api_id"));
     const apiHashToUse = apiHash || Deno.env.get("telegram_api_hash");
-    let sessionStringToUse = sessionString;
-
-    // If phone is provided and no session string, try to get it from stored sessions
-    if (phone && !sessionStringToUse) {
-      console.log(`Attempting to retrieve stored session for phone: ${phone}`);
-      try {
-        // In a production app, you would retrieve this from a database
-        // This is a simplification
-        const storedSession = Deno.env.get(`telegram_session_${phone.replace(/[^0-9]/g, '')}`);
-        if (storedSession) {
-          console.log("Found stored session for this phone number");
-          sessionStringToUse = storedSession;
-        } else {
-          console.log("No stored session found for this phone number");
-        }
-      } catch (sessionError) {
-        console.error("Error retrieving session:", sessionError);
-      }
-    }
-
+    
     if (!apiIdToUse || !apiHashToUse) {
       console.error("Missing Telegram API credentials");
       return new Response(
@@ -165,17 +159,39 @@ serve(async (req) => {
       );
     }
 
-    // Check if we have a valid session string
-    if (!sessionStringToUse) {
-      console.error("Missing Telegram session string");
+    // Fetch the session string from the database
+    console.log(`Fetching session for user: ${userId}`);
+    
+    let sessionQuery = supabase
+      .from('telegram_sessions')
+      .select('*')
+      .eq('user_id', userId);
+    
+    // If sessionId is provided, query by id
+    if (sessionId) {
+      sessionQuery = sessionQuery.eq('id', sessionId);
+    } 
+    // If phone is provided, query by phone
+    else if (phone) {
+      sessionQuery = sessionQuery.eq('phone', phone);
+    }
+    
+    const { data: sessionData, error: sessionError } = await sessionQuery.limit(1).single();
+    
+    if (sessionError || !sessionData) {
+      console.error("Failed to fetch session from database:", sessionError);
       return new Response(
         JSON.stringify({ 
-          error: "Telegram session string not found",
-          needsAuth: true 
+          error: "Telegram session not found, authentication required",
+          needsAuth: true,
+          details: sessionError ? sessionError.message : "No session found for this user"
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    
+    const sessionString = sessionData.session_string;
+    console.log(`Retrieved session for user: ${userId}, phone: ${sessionData.phone}`);
 
     console.log(`Processing request for ${handles.length} handles with limit ${limit}`);
     
@@ -186,24 +202,32 @@ serve(async (req) => {
         limit, 
         apiIdToUse, 
         apiHashToUse, 
-        sessionStringToUse
+        sessionString
       );
       
       console.log("Successfully fetched real messages from Telegram API");
       
-      // If we have a phone number and a new session string, store it
-      if (phone && newSessionString !== sessionStringToUse) {
-        console.log("Storing updated session string");
-        // In a production app, you would store this in a database
-        // This is a simplification for the example
-        // Deno.env.set(`telegram_session_${phone.replace(/[^0-9]/g, '')}`, newSessionString);
+      // If the session string has changed, update it in the database
+      if (newSessionString !== sessionString) {
+        console.log("Updating session in database");
+        const { error: updateError } = await supabase
+          .from('telegram_sessions')
+          .update({ session_string: newSessionString })
+          .eq('id', sessionData.id);
+        
+        if (updateError) {
+          console.error("Failed to update session in database:", updateError);
+        } else {
+          console.log("Session updated successfully in database");
+        }
       }
       
       // Return the results with real data
       return new Response(
         JSON.stringify({ 
           messages: result,
-          sessionString: newSessionString,
+          sessionId: sessionData.id,
+          phone: sessionData.phone,
           mode: "live"
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -217,7 +241,7 @@ serve(async (req) => {
         JSON.stringify({ 
           error: `Telegram API Error: ${telegramError.message}`,
           needsAuth: telegramError.message.includes("auth") || telegramError.message.includes("session"),
-          details: "Please check your API credentials and session string"
+          details: "Please check your API credentials and session"
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

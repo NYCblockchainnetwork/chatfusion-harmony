@@ -1,5 +1,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.5.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,12 +11,17 @@ interface PhoneAuthRequest {
   phone: string;
   apiId?: number;
   apiHash?: string;
+  userId?: string;
 }
 
 interface CodeVerifyRequest extends PhoneAuthRequest {
   code: string;
   phoneCodeHash: string;
 }
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -31,6 +37,7 @@ serve(async (req) => {
     const data = await req.json();
     const apiId = data.apiId || Number(Deno.env.get("telegram_api_id"));
     const apiHash = data.apiHash || Deno.env.get("telegram_api_hash");
+    const userId = data.userId;
 
     if (!apiId || !apiHash) {
       console.error("Missing Telegram API credentials");
@@ -97,16 +104,16 @@ serve(async (req) => {
     
     // If the action is "verify-code", verify the code and get a session
     else if (action === "verify-code") {
-      const { phone, code, phoneCodeHash } = data as CodeVerifyRequest;
+      const { phone, code, phoneCodeHash, userId } = data as CodeVerifyRequest;
       
-      if (!phone || !code || !phoneCodeHash) {
+      if (!phone || !code || !phoneCodeHash || !userId) {
         return new Response(
-          JSON.stringify({ error: "Phone number, code, and phoneCodeHash are required" }),
+          JSON.stringify({ error: "Phone number, code, phoneCodeHash, and userId are required" }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
-      console.log(`Verifying code for phone: ${phone}`);
+      console.log(`Verifying code for phone: ${phone}, userId: ${userId}`);
       
       // Create a new Telegram client
       const stringSession = new StringSession("");
@@ -131,8 +138,24 @@ serve(async (req) => {
         const sessionString = stringSession.save();
         console.log("Session string saved");
         
-        // Store the session (in a production app, this would go to a database)
-        // Deno.env.set(`telegram_session_${phone.replace(/[^0-9]/g, '')}`, sessionString);
+        // Store the session in the database
+        console.log(`Storing session for user: ${userId}, phone: ${phone}`);
+        
+        const { data: sessionData, error: sessionError } = await supabase
+          .from('telegram_sessions')
+          .upsert({
+            user_id: userId,
+            phone: phone,
+            session_string: sessionString
+          })
+          .select();
+        
+        if (sessionError) {
+          console.error("Error storing session in database:", sessionError);
+          throw new Error(`Failed to store session: ${sessionError.message}`);
+        }
+        
+        console.log("Session stored in database successfully:", sessionData);
         
         // Disconnect client
         await client.disconnect();

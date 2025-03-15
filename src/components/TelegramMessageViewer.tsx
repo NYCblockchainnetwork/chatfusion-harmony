@@ -8,10 +8,11 @@ import TelegramPhoneVerification from './telegram/TelegramPhoneVerification';
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { toast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, telegramClient } from "@/integrations/supabase/client";
 import { Button } from './ui/button';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const TelegramMessageViewer = () => {
   const [handles, setHandles] = useState<string[]>([]);
@@ -19,28 +20,59 @@ const TelegramMessageViewer = () => {
   const [messages, setMessages] = useState<Record<string, any>>({});
   const [isMockMode, setIsMockMode] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
+  const [telegramSessions, setTelegramSessions] = useState<any[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const { user } = useAuth();
   const { settings, updateSettings } = useUserSettings();
   const [showCredentialsForm, setShowCredentialsForm] = useState(false);
   const [apiId, setApiId] = useState('');
   const [apiHash, setApiHash] = useState('');
   
-  // Load existing handles from settings
+  // Load existing handles from settings and fetch sessions
   useEffect(() => {
     if (settings?.telegramHandles && settings.telegramHandles.length > 0) {
       setHandles(settings.telegramHandles);
     }
     
-    // Check if we need to show the credentials form
-    if (user?.id) {
-      const storedApiId = localStorage.getItem(`telegram_api_id_${user.id}`);
-      const storedApiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
-      
-      if (!storedApiId || !storedApiHash) {
-        setShowCredentialsForm(true);
-      }
-    }
+    // Fetch active sessions
+    fetchTelegramSessions();
   }, [settings, user]);
+
+  // Fetch telegram sessions from database
+  const fetchTelegramSessions = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const { data, error } = await telegramClient.getSessions(user.id);
+      
+      if (error) throw error;
+      
+      setTelegramSessions(data || []);
+      
+      if (data && data.length > 0) {
+        // Set the active session ID from settings or use the first one
+        const activeId = settings?.activeSessionId || data[0].id;
+        setSelectedSessionId(activeId);
+      } else {
+        // Check if we need to show the credentials form
+        const storedApiId = localStorage.getItem(`telegram_api_id_${user.id}`);
+        const storedApiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
+        
+        if (!storedApiId || !storedApiHash) {
+          setShowCredentialsForm(true);
+        } else {
+          setNeedsAuth(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching Telegram sessions:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load Telegram sessions",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handleAddHandle = (handle: string) => {
     if (handles.includes(handle)) {
@@ -119,7 +151,7 @@ const TelegramMessageViewer = () => {
     setNeedsAuth(true);
   };
   
-  const fetchMessages = async (sessionString?: string) => {
+  const fetchMessages = async () => {
     if (handles.length === 0) {
       toast({
         title: "No Handles",
@@ -143,14 +175,9 @@ const TelegramMessageViewer = () => {
         return;
       }
       
-      console.log("Fetching Telegram messages via Edge Function");
-      
       // Get stored API credentials from localStorage
       const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
       const apiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
-      
-      // Use provided session string or get from localStorage
-      const sessionStringToUse = sessionString || localStorage.getItem(`telegram_session_${user.id}`);
       
       if (!apiId || !apiHash) {
         toast({
@@ -163,6 +190,17 @@ const TelegramMessageViewer = () => {
         return;
       }
       
+      if (!selectedSessionId && telegramSessions.length === 0) {
+        toast({
+          title: "No Active Session",
+          description: "Please authenticate with Telegram first",
+          variant: "destructive"
+        });
+        setNeedsAuth(true);
+        setIsLoading(false);
+        return;
+      }
+      
       // Call the Supabase Edge Function to fetch Telegram messages
       const { data, error } = await supabase.functions.invoke('fetch-telegram-messages', {
         body: {
@@ -170,7 +208,8 @@ const TelegramMessageViewer = () => {
           limit: 5,
           apiId: apiId ? parseInt(apiId, 10) : undefined,
           apiHash,
-          sessionString: sessionStringToUse
+          userId: user.id,
+          sessionId: selectedSessionId
         }
       });
       
@@ -199,12 +238,6 @@ const TelegramMessageViewer = () => {
         console.log("Using live Telegram data");
       }
       
-      // Save the new session string if provided
-      if (data.sessionString && user.id) {
-        localStorage.setItem(`telegram_session_${user.id}`, data.sessionString);
-        console.log("Updated session string saved to localStorage");
-      }
-      
       setMessages(data.messages);
       
       toast({
@@ -230,10 +263,23 @@ const TelegramMessageViewer = () => {
   };
   
   // Handle successful phone verification
-  const handleVerificationSuccess = (sessionString: string) => {
+  const handleVerificationSuccess = (sessionId: string, phone: string) => {
     setNeedsAuth(false);
-    // Fetch messages with the new session string
-    fetchMessages(sessionString);
+    setSelectedSessionId(sessionId);
+    
+    // Save active session ID to user settings
+    if (settings) {
+      updateSettings({
+        ...settings,
+        activeSessionId: sessionId
+      });
+    }
+    
+    // Refresh sessions list
+    fetchTelegramSessions();
+    
+    // Fetch messages with the new session
+    fetchMessages();
   };
   
   // Cancel verification
@@ -286,6 +332,19 @@ const TelegramMessageViewer = () => {
         title: "Error",
         description: error.message || "Failed to load secure credentials",
         variant: "destructive"
+      });
+    }
+  };
+
+  // Handle session change
+  const handleSessionChange = (sessionId: string) => {
+    setSelectedSessionId(sessionId);
+    
+    // Save active session ID to user settings
+    if (settings) {
+      updateSettings({
+        ...settings,
+        activeSessionId: sessionId
       });
     }
   };
@@ -362,6 +421,36 @@ const TelegramMessageViewer = () => {
     );
   };
 
+  // Render session selector
+  const renderSessionSelector = () => {
+    if (!telegramSessions || telegramSessions.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Active Telegram Session
+        </label>
+        <Select
+          value={selectedSessionId || undefined}
+          onValueChange={handleSessionChange}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a session" />
+          </SelectTrigger>
+          <SelectContent>
+            {telegramSessions.map((session) => (
+              <SelectItem key={session.id} value={session.id}>
+                {session.phone}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -384,6 +473,8 @@ const TelegramMessageViewer = () => {
           />
         ) : (
           <>
+            {renderSessionSelector()}
+            
             {isMockMode && (
               <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
                 <p className="text-sm text-amber-800">
@@ -398,7 +489,7 @@ const TelegramMessageViewer = () => {
             <HandleList 
               handles={handles} 
               onRemoveHandle={handleRemoveHandle} 
-              onFetchMessages={() => fetchMessages()} 
+              onFetchMessages={fetchMessages} 
               isLoading={isLoading}
             />
             

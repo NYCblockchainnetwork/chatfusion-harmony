@@ -10,7 +10,7 @@ import { useForm } from "react-hook-form";
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, telegramClient } from '@/integrations/supabase/client';
 import TelegramPhoneVerification from './telegram/TelegramPhoneVerification';
 
 const TelegramAuthSection = () => {
@@ -18,6 +18,7 @@ const TelegramAuthSection = () => {
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showPhoneVerification, setShowPhoneVerification] = useState(false);
+  const [telegramSessions, setTelegramSessions] = useState<any[]>([]);
   const { settings, updateSettings } = useUserSettings();
   const { user } = useAuth();
   
@@ -28,25 +29,46 @@ const TelegramAuthSection = () => {
     },
   });
 
-  useEffect(() => {
+  // Fetch telegram sessions from database
+  const fetchTelegramSessions = async () => {
     if (!user?.id) return;
     
     try {
-      if (settings?.telegramIntegrationEnabled) {
-        setConnectionStatus('connected');
-      }
+      const { data, error } = await telegramClient.getSessions(user.id);
       
+      if (error) throw error;
+      
+      setTelegramSessions(data || []);
+      
+      if (data && data.length > 0) {
+        setConnectionStatus('connected');
+        
+        // Set API credentials in form if they exist in localStorage
+        const storedApiId = localStorage.getItem(`telegram_api_id_${user.id}`);
+        const storedApiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
+        
+        if (storedApiId) form.setValue('apiId', storedApiId);
+        if (storedApiHash) form.setValue('apiHash', storedApiHash);
+      } else {
+        setConnectionStatus('disconnected');
+      }
+    } catch (error) {
+      console.error('Error fetching Telegram sessions:', error);
+      setErrorMessage("Failed to load saved sessions");
+    }
+  };
+
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    fetchTelegramSessions();
+    
+    try {
       const storedApiId = localStorage.getItem(`telegram_api_id_${user.id}`);
       const storedApiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
-      const sessionString = localStorage.getItem(`telegram_session_${user.id}`);
       
       if (storedApiId) form.setValue('apiId', storedApiId);
       if (storedApiHash) form.setValue('apiHash', storedApiHash);
-      
-      // If we have credentials and a session, consider it connected
-      if (storedApiId && storedApiHash && sessionString) {
-        setConnectionStatus('connected');
-      }
     } catch (error) {
       console.error('Error loading Telegram credentials:', error);
       setErrorMessage("Failed to load saved credentials");
@@ -64,11 +86,6 @@ const TelegramAuthSection = () => {
       console.error(`Error saving ${service}:`, error);
       return false;
     }
-  };
-
-  const getApiKeyFromLocalStorage = (service: string): string | null => {
-    if (!user?.id) return null;
-    return localStorage.getItem(`${service}_${user.id}`);
   };
   
   const handleUseEnvSecrets = async () => {
@@ -175,7 +192,7 @@ const TelegramAuthSection = () => {
     }
   };
   
-  const handleDisconnect = async () => {
+  const handleDisconnect = async (sessionId?: string) => {
     if (!user?.id) {
       toast({
         title: "Error",
@@ -186,22 +203,40 @@ const TelegramAuthSection = () => {
     }
     
     try {
-      localStorage.removeItem(`telegram_api_id_${user.id}`);
-      localStorage.removeItem(`telegram_api_hash_${user.id}`);
-      localStorage.removeItem(`telegram_session_${user.id}`);
+      if (sessionId) {
+        // Delete specific session
+        const { error } = await telegramClient.deleteSession(sessionId);
+        
+        if (error) throw error;
+        
+        toast({
+          title: "Session Removed",
+          description: "The selected Telegram session has been removed",
+        });
+      } else {
+        // Delete all sessions
+        for (const session of telegramSessions) {
+          await telegramClient.deleteSession(session.id);
+        }
+        
+        // Clear local storage as well
+        localStorage.removeItem(`telegram_api_id_${user.id}`);
+        localStorage.removeItem(`telegram_api_hash_${user.id}`);
+        
+        toast({
+          title: "All Sessions Removed",
+          description: "All Telegram sessions have been removed",
+        });
+      }
       
+      // Update settings
       await updateSettings({
         telegramIntegrationEnabled: false,
       });
       
-      setConnectionStatus('disconnected');
-      setErrorMessage(null);
-      form.reset();
+      // Refresh session list
+      await fetchTelegramSessions();
       
-      toast({
-        title: "Disconnected",
-        description: "Telegram account has been disconnected",
-      });
     } catch (error) {
       console.error('Error disconnecting from Telegram:', error);
       setErrorMessage("Failed to disconnect from Telegram");
@@ -213,31 +248,66 @@ const TelegramAuthSection = () => {
     }
   };
   
-  const handleVerificationSuccess = (sessionString: string) => {
-    // Save the session string
-    if (user?.id) {
-      localStorage.setItem(`telegram_session_${user.id}`, sessionString);
-    }
-    
+  const handleVerificationSuccess = (sessionId: string, phone: string) => {
     // Update settings
     updateSettings({
       telegramIntegrationEnabled: true,
-      telegramHandles: settings?.telegramHandles || []
+      telegramHandles: settings?.telegramHandles || [],
+      activeSessionId: sessionId
     });
     
-    setConnectionStatus('connected');
+    // Refresh session list
+    fetchTelegramSessions();
+    
     setShowPhoneVerification(false);
     setIsConnecting(false);
     
     toast({
       title: "Success",
-      description: "Connected to Telegram successfully. You can now fetch messages.",
+      description: `Connected to Telegram with phone ${phone}. You can now fetch messages.`,
     });
   };
   
   const handleVerificationCancel = () => {
     setShowPhoneVerification(false);
     setIsConnecting(false);
+  };
+  
+  const renderSessionList = () => {
+    if (telegramSessions.length === 0) {
+      return (
+        <div className="bg-amber-50 p-3 rounded-md border border-amber-200">
+          <p className="text-amber-700">No sessions found</p>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="space-y-3">
+        {telegramSessions.map(session => (
+          <div key={session.id} className="bg-green-50 p-3 rounded-md border border-green-200 flex justify-between items-center">
+            <div>
+              <p className="text-green-700 font-medium">Phone: {session.phone}</p>
+              <p className="text-xs text-green-600">Connected on {new Date(session.created_at).toLocaleString()}</p>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+              onClick={() => handleDisconnect(session.id)}
+            >
+              Remove
+            </Button>
+          </div>
+        ))}
+        
+        <div className="pt-2">
+          <Button variant="outline" className="w-full" onClick={() => setShowPhoneVerification(true)}>
+            Add Another Phone
+          </Button>
+        </div>
+      </div>
+    );
   };
   
   return (
@@ -268,8 +338,18 @@ const TelegramAuthSection = () => {
               <p className="text-green-700 font-medium">Connected to Telegram</p>
               <p className="text-sm text-green-600">Your Telegram account is successfully connected</p>
             </div>
-            <Button variant="destructive" onClick={handleDisconnect}>
-              Disconnect Telegram
+            
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Telegram Sessions</h3>
+              {renderSessionList()}
+            </div>
+            
+            <Button 
+              variant="destructive" 
+              onClick={() => handleDisconnect()}
+              className="mt-4"
+            >
+              Disconnect All Sessions
             </Button>
           </div>
         ) : (
