@@ -128,7 +128,7 @@ async function processTelegramFetch(
           // Transform the raw messages to our TelegramMessage format
           const transformedMessages = fetchedMessages.map(msg => ({
             id: msg.id,
-            text: msg.text || msg.message || "(No text content)",
+            text: msg.text || "(No text content)",
             timestamp: new Date(msg.date * 1000).toISOString(),
             from: {
               username: entity.username || "unknown",

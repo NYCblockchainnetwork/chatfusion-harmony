@@ -1,5 +1,5 @@
 
-// This is a mock implementation for the Telegram client
+// This is a modified implementation for the Telegram client
 // In a production app, this would be handled in a backend service
 
 export interface TelegramCredentials {
@@ -22,8 +22,8 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
       throw new Error("API ID and API Hash are required");
     }
     
-    // In a real implementation, this would create an actual Telegram client
-    // For our simulation, we're creating a more detailed mock
+    // For now, we'll use a more realistic mock implementation
+    // that simulates the structure of real Telegram responses
     
     // Mock client implementation with debugging information
     const client = {
@@ -36,21 +36,6 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
         return true;
       },
       
-      start: async () => {
-        console.log("Starting Telegram client session...");
-        await new Promise(resolve => setTimeout(resolve, 300));
-        console.log("Telegram client session started (simulated)");
-        return true;
-      },
-      
-      getMe: async () => {
-        console.log("Retrieving user information...");
-        await new Promise(resolve => setTimeout(resolve, 200));
-        const user = { id: 123456789, username: 'user', firstName: 'Test', lastName: 'User' };
-        console.log("Retrieved user information (simulated):", user);
-        return user;
-      },
-      
       getEntity: async (username: string) => {
         console.log(`Resolving entity for ${username}...`);
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -61,11 +46,12 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
           throw new Error(`Username ${username} not found`);
         }
         
+        // Return a more realistic Telegram entity structure
         const entity = { 
           id: Math.floor(Math.random() * 1000000), 
           username: username.replace('@', ''),
-          firstName: 'Entity',
-          lastName: 'User'
+          firstName: `First_${username.replace('@', '')}`,
+          lastName: `Last_${username.replace('@', '')}`
         };
         console.log(`Entity resolved for ${username}:`, entity);
         return entity;
@@ -75,13 +61,19 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
         console.log(`Fetching messages for entity ${entity.username} with options:`, options);
         await new Promise(resolve => setTimeout(resolve, 700));
         
-        // Return simulated messages in the format that would be returned by the real Telegram API
+        // Return realistic-looking messages in the format similar to Telegram API
+        // This makes it easier to swap with a real implementation later
         const messages = Array(options.limit || 5).fill(null).map((_, i) => ({
           id: Math.floor(Math.random() * 1000000) + i,
-          text: `This is a real message #${i + 1} from ${entity.username}. In production, this would contain actual message content.`,
-          message: `Alternative message field #${i + 1}`,
+          text: `Message #${i + 1}: This is a simulated message from ${entity.username}. This is only for testing until the real Telegram API is integrated.`,
           date: Math.floor(Date.now() / 1000) - i * 3600, // Unix timestamp in seconds
-          fromId: entity.id
+          fromId: entity.id,
+          from: {
+            id: entity.id,
+            username: entity.username,
+            firstName: entity.firstName,
+            lastName: entity.lastName
+          }
         }));
         
         console.log(`Retrieved ${messages.length} messages for ${entity.username}`);
@@ -99,55 +91,10 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
     
     return {
       client,
-      stringSession,
-      getSessionString: () => stringSession.save(),
+      stringSession
     };
   } catch (error) {
     console.error("Error creating Telegram client:", error);
     throw new Error(`Failed to create Telegram client: ${error.message}`);
-  }
-}
-
-export async function connectToTelegram(client: any, callbacks: {
-  onPhoneNumber?: () => Promise<string>;
-  onPassword?: () => Promise<string>;
-  onPhoneCode?: () => Promise<string>;
-} = {}) {
-  try {
-    console.log("Attempting to connect to Telegram...");
-    // Simulate connection delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // For testing purposes, we can simulate different scenarios
-    const randomScenario = Math.floor(Math.random() * 10);
-    
-    if (randomScenario === 0) {
-      console.error("Simulated connection error");
-      throw new Error("Simulated connection error");
-    }
-    
-    if (randomScenario === 1 && callbacks.onPhoneNumber) {
-      console.log("Requesting phone number...");
-      const phoneNumber = await callbacks.onPhoneNumber();
-      console.log(`Received phone number: ${phoneNumber.substring(0, 3)}****`);
-    }
-    
-    if (randomScenario === 2 && callbacks.onPhoneCode) {
-      console.log("Requesting verification code...");
-      const code = await callbacks.onPhoneCode();
-      console.log("Received verification code");
-    }
-    
-    if (randomScenario === 3 && callbacks.onPassword) {
-      console.log("Requesting 2FA password...");
-      const password = await callbacks.onPassword();
-      console.log("Received 2FA password");
-    }
-    
-    console.log("Successfully connected to Telegram (simulated)");
-    return true;
-  } catch (error) {
-    console.error("Error connecting to Telegram:", error);
-    return false;
   }
 }
