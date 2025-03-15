@@ -6,20 +6,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { MessageCircle, Search, User } from "lucide-react";
+import { MessageCircle, Search, User, AlertCircle } from "lucide-react";
 import { fetchMessagesFromHandles, TelegramMessage } from '@/utils/telegramMessages';
 import { useUserSettings } from '@/hooks/use-user-settings';
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 const TelegramMessageViewer = () => {
   const [handleInput, setHandleInput] = useState('');
   const [handles, setHandles] = useState<string[]>([]);
   const [messages, setMessages] = useState<Record<string, TelegramMessage[]>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { settings, updateSettings } = useUserSettings();
   
   // Load saved handles when component mounts
   useEffect(() => {
     if (settings?.telegramHandles && settings.telegramHandles.length > 0) {
+      console.log("Loaded saved handles from settings:", settings.telegramHandles);
       setHandles(settings.telegramHandles);
     }
   }, [settings]);
@@ -49,6 +52,7 @@ const TelegramMessageViewer = () => {
       return;
     }
     
+    console.log(`Adding handle: @${cleanHandle}`);
     const newHandles = [...handles, cleanHandle];
     setHandles(newHandles);
     setHandleInput('');
@@ -59,6 +63,7 @@ const TelegramMessageViewer = () => {
         telegramHandles: newHandles
       });
       
+      console.log(`Handle @${cleanHandle} saved to settings`);
       toast({
         title: "Handle saved",
         description: `@${cleanHandle} has been saved to your handles list`,
@@ -74,6 +79,7 @@ const TelegramMessageViewer = () => {
   };
   
   const removeHandle = async (handle: string) => {
+    console.log(`Removing handle: @${handle}`);
     const newHandles = handles.filter(h => h !== handle);
     setHandles(newHandles);
     
@@ -87,6 +93,7 @@ const TelegramMessageViewer = () => {
       await updateSettings({
         telegramHandles: newHandles
       });
+      console.log(`Handle @${handle} removed from settings`);
     } catch (error) {
       console.error("Error removing handle:", error);
       toast({
@@ -108,15 +115,39 @@ const TelegramMessageViewer = () => {
     }
     
     setIsLoading(true);
+    setError(null);
+    
     try {
+      console.log("Starting to fetch messages for handles:", handles);
       const fetchedMessages = await fetchMessagesFromHandles(handles);
+      
+      // Check if any errors in the responses
+      const handleErrors = Object.entries(fetchedMessages)
+        .filter(([_, msgs]) => msgs.length === 1 && msgs[0].id === 0 && msgs[0].text.startsWith('Error'))
+        .map(([handle, msgs]) => `@${handle}: ${msgs[0].text.replace('Error fetching messages for @' + handle + ': ', '')}`);
+      
+      if (handleErrors.length > 0) {
+        // There were errors for some handles
+        setError(`Issues fetching messages for some handles: ${handleErrors.join('; ')}`);
+      }
+      
       setMessages(fetchedMessages);
-      toast({
-        title: "Success",
-        description: `Fetched messages from ${Object.keys(fetchedMessages).length} handles`,
-      });
+      
+      const successCount = Object.keys(fetchedMessages).length - handleErrors.length;
+      if (successCount > 0) {
+        toast({
+          title: "Success",
+          description: `Fetched messages from ${successCount} handles`,
+        });
+      }
     } catch (error) {
       console.error("Error fetching messages:", error);
+      setError(error.message || "Failed to fetch messages");
+      toast({
+        title: "Error",
+        description: error.message || "Failed to fetch messages",
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
@@ -182,6 +213,14 @@ const TelegramMessageViewer = () => {
             </div>
           )}
           
+          {error && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          
           {Object.keys(messages).length > 0 && (
             <div className="space-y-4 mt-6">
               <h3 className="text-lg font-medium">Recent Messages</h3>
@@ -193,21 +232,37 @@ const TelegramMessageViewer = () => {
                     @{handle}
                   </h4>
                   
+                  {/* Show error message if this handle has an error */}
+                  {handleMessages.length === 1 && handleMessages[0].id === 0 && handleMessages[0].text.startsWith('Error') && (
+                    <Alert variant="destructive" className="mb-3">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{handleMessages[0].text}</AlertDescription>
+                    </Alert>
+                  )}
+                  
                   <div className="space-y-3">
-                    {handleMessages.map((message) => (
-                      <div key={message.id} className="bg-muted p-3 rounded-md">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                          <MessageCircle className="h-4 w-4" />
-                          <span>{formatDate(message.timestamp)}</span>
+                    {/* Don't show error messages here */}
+                    {handleMessages
+                      .filter(msg => !(msg.id === 0 && msg.text.startsWith('Error')))
+                      .map((message) => (
+                        <div key={message.id} className="bg-muted p-3 rounded-md">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                            <MessageCircle className="h-4 w-4" />
+                            <span>{formatDate(message.timestamp)}</span>
+                          </div>
+                          <Textarea 
+                            value={message.text}
+                            readOnly
+                            className="mt-1 resize-none"
+                            rows={2}
+                          />
                         </div>
-                        <Textarea 
-                          value={message.text}
-                          readOnly
-                          className="mt-1 resize-none"
-                          rows={2}
-                        />
-                      </div>
-                    ))}
+                      ))
+                    }
+                    
+                    {handleMessages.filter(msg => !(msg.id === 0 && msg.text.startsWith('Error'))).length === 0 && (
+                      <p className="text-sm text-muted-foreground">No messages available</p>
+                    )}
                   </div>
                 </div>
               ))}
