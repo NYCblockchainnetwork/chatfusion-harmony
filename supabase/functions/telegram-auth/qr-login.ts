@@ -80,7 +80,7 @@ export async function processQrCodeLogin(supabase: any, userId: string, token: s
     
     // For testing purposes - simulate a successful login after random time 
     // In reality, this would be detected by listening for Telegram API events
-    const shouldSucceed = Math.random() > 0.7; // 30% chance of success on each check
+    const shouldSucceed = Math.random() > 0.3; // 70% chance of success on each check
     
     if (shouldSucceed) {
       // Get Telegram API credentials

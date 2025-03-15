@@ -53,7 +53,7 @@ serve(async (req) => {
         return createResponse({ error: "Invalid method" }, 400);
     }
   } catch (error) {
-    console.error("Error in telegram-auth function:", error);
+    console.error("Error in telegram-auth function:", error.message);
     return new Response(
       JSON.stringify({ error: `Server error: ${error.message}` }),
       {

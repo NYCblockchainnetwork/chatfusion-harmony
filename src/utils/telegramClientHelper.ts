@@ -33,7 +33,11 @@ export function extendTelegramClient(client: any) {
       }
       
       console.log("Successfully got QR login token:", data);
-      return data;
+      return {
+        token: data.token,
+        qrUrl: data.qrUrl,
+        expiresAt: data.expiresAt
+      };
     } catch (error) {
       console.error("Error in getQRLoginToken:", error);
       throw error;
@@ -73,7 +77,11 @@ export function extendTelegramClient(client: any) {
       }
       
       console.log("QR login status:", data);
-      return data;
+      return {
+        success: data.success,
+        expired: data.expired || false,
+        sessionId: data.sessionId
+      };
     } catch (error) {
       console.error("Error in checkQRLoginStatus:", error);
       throw error;
