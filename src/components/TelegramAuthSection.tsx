@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,11 +38,11 @@ const TelegramAuthSection = () => {
           return;
         }
         
-        // Try to get saved API credentials from Supabase via our service
+        // Try to get saved API credentials from Edge Function
         const apiId = await getApiKey('telegram_api_id');
         const apiHash = await getApiKey('telegram_api_hash');
         
-        console.log("Retrieved credentials from Supabase:", {
+        console.log("Retrieved credentials:", {
           apiId: apiId ? "exists" : "missing",
           apiHash: apiHash ? "exists" : "missing"
         });
@@ -89,7 +88,7 @@ const TelegramAuthSection = () => {
     try {
       console.log("Saving Telegram credentials for user:", user.id);
       
-      // Store API credentials securely in Supabase
+      // Store API credentials securely via Edge Function
       const apiIdSaved = await saveApiKey('telegram_api_id', apiId);
       const apiHashSaved = await saveApiKey('telegram_api_hash', apiHash);
       
@@ -100,11 +99,7 @@ const TelegramAuthSection = () => {
       }
       
       // Update user settings to indicate Telegram is connected
-      await updateSettings({
-        telegramIntegrationEnabled: true,
-        // If not already initialized
-        telegramHandles: settings?.telegramHandles || [],
-      });
+      // Note: This is now handled in the saveApiKey function when both keys are present
       
       setConnectionStatus('connected');
       
@@ -135,7 +130,7 @@ const TelegramAuthSection = () => {
     }
     
     try {
-      // Remove sensitive API credentials from Supabase
+      // Remove sensitive API credentials via Edge Function
       await saveApiKey('telegram_api_id', '');
       await saveApiKey('telegram_api_hash', '');
       await saveApiKey('telegram_session', '');

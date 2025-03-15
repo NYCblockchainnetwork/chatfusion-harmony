@@ -1,3 +1,4 @@
+
 // Utility for retrieving Telegram messages using the Telegram client API
 
 import { toast } from "@/hooks/use-toast";
@@ -31,19 +32,19 @@ export async function fetchMessagesFromHandles(
 
     console.log("Fetching messages for user ID:", userId);
 
-    // Get Telegram credentials from Supabase via our service
+    // Get Telegram credentials from Edge Function
     const apiId = await userSettingsService.getApiKey(userId, 'telegram_api_id');
     const apiHash = await userSettingsService.getApiKey(userId, 'telegram_api_hash');
     const sessionString = await userSettingsService.getApiKey(userId, 'telegram_session');
 
-    console.log("Retrieved Telegram credentials from Supabase:", { 
+    console.log("Retrieved Telegram credentials:", { 
       apiId: apiId ? "exists" : "missing", 
       apiHash: apiHash ? "exists" : "missing",
       sessionString: sessionString ? "exists" : "missing"
     });
 
     if (!apiId || !apiHash) {
-      console.error("Telegram API credentials not found in Supabase");
+      console.error("Telegram API credentials not found");
       throw new Error("Telegram API credentials not found. Please set up Telegram integration first.");
     }
 
@@ -86,7 +87,7 @@ async function processTelegramFetch(
       // Save the session string for future use if it changed
       const newSessionString = stringSession.save();
       if (newSessionString !== credentials.sessionString) {
-        console.log("Saving new session string to Supabase");
+        console.log("Saving new session string");
         await userSettingsService.saveApiKey(userId, 'telegram_session', newSessionString);
       }
     } catch (connectionError) {

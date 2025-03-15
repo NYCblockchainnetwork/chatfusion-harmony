@@ -8,8 +8,9 @@ import {
   getDefaultUserPreferences 
 } from '@/models/UserSettings';
 
-// This service handles user settings and secrets storage
-// It uses Supabase for secure storage of sensitive information
+// This service handles user settings storage
+// It uses Supabase for secure storage of user settings and preferences
+// API keys are stored in Supabase Edge Function secrets
 
 export const userSettingsService = {
   // Settings
@@ -166,65 +167,56 @@ export const userSettingsService = {
     }
   },
 
-  // Sensitive data (stored in Supabase secrets)
+  // API Keys (Stored in Supabase Edge Function Secrets)
   async saveApiKey(userId: string, service: string, apiKey: string): Promise<boolean> {
     console.log(`Saving ${service} API key for user:`, userId);
     try {
-      if (!apiKey) {
-        // If clearing a key, remove from Supabase
-        const { error } = await supabase
-          .from('user_api_keys')
-          .delete()
-          .eq('user_id', userId)
-          .eq('service', service);
-          
-        if (error) {
-          console.error(`Error deleting ${service} API key:`, error);
-          return false;
+      // Call Supabase Edge Function to securely store API key
+      const { data, error } = await supabase.functions.invoke('store-api-key', {
+        body: { 
+          userId,
+          service,
+          apiKey
         }
-        
-        // Also remove from localStorage fallback if it exists
-        localStorage.removeItem(`${service}_${userId}`);
-        return true;
-      }
-      
-      // Securely save to Supabase
-      const { error } = await supabase
-        .from('user_api_keys')
-        .upsert(
-          { 
-            user_id: userId, 
-            service, 
-            api_key: apiKey,
-            updated_at: new Date().toISOString()
-          },
-          { onConflict: 'user_id, service' }
-        );
+      });
       
       if (error) {
-        console.error(`Error saving ${service} API key to Supabase:`, error);
-        
-        // As a fallback, store in localStorage with base64 encoding
-        // (This is NOT secure for production, only for development)
-        const encodedKey = btoa(apiKey);
-        localStorage.setItem(`${service}_${userId}`, encodedKey);
-        
+        console.error(`Error saving ${service} API key:`, error);
         toast({
-          title: 'Warning',
-          description: `Could not securely store ${service} API key in Supabase, using fallback storage`,
+          title: 'Error',
+          description: `Failed to save ${service} API key securely`,
           variant: 'destructive',
         });
-      } else {
-        console.log(`Successfully saved ${service} API key to Supabase`);
-        
-        // Remove from localStorage if it was previously stored there
-        localStorage.removeItem(`${service}_${userId}`);
-        
-        toast({
-          title: 'API Key Saved',
-          description: `Your ${service} API key has been securely stored`,
-        });
+        return false;
       }
+      
+      console.log(`Successfully saved ${service} API key via Edge Function`);
+      
+      // Update user settings to indicate this service is connected
+      if (service.startsWith('telegram_')) {
+        const settings = await this.getUserSettings(userId);
+        if (settings) {
+          if (service === 'telegram_api_id' || service === 'telegram_api_hash') {
+            // Only update if we have both keys
+            const hasApiId = service === 'telegram_api_id' || await this.getApiKey(userId, 'telegram_api_id');
+            const hasApiHash = service === 'telegram_api_hash' || await this.getApiKey(userId, 'telegram_api_hash');
+            
+            if (hasApiId && hasApiHash) {
+              // Both keys present, update settings
+              await this.saveUserSettings(userId, {
+                ...settings,
+                telegramIntegrationEnabled: true,
+                telegramHandles: settings.telegramHandles || []
+              });
+            }
+          }
+        }
+      }
+        
+      toast({
+        title: 'API Key Saved',
+        description: `Your ${service} API key has been securely stored`,
+      });
       
       return true;
     } catch (error) {
@@ -240,26 +232,21 @@ export const userSettingsService = {
 
   async getApiKey(userId: string, service: string): Promise<string | null> {
     try {
-      // First try to get from Supabase
-      const { data, error } = await supabase
-        .from('user_api_keys')
-        .select('api_key')
-        .eq('user_id', userId)
-        .eq('service', service)
-        .single();
+      // Call Supabase Edge Function to retrieve API key
+      const { data, error } = await supabase.functions.invoke('get-api-key', {
+        body: { 
+          userId,
+          service
+        }
+      });
       
       if (error) {
-        console.error(`Error retrieving ${service} API key from Supabase:`, error);
-        
-        // Fall back to localStorage
-        const encodedKey = localStorage.getItem(`${service}_${userId}`);
-        if (!encodedKey) return null;
-        
-        return atob(encodedKey); // Decode from base64
+        console.error(`Error retrieving ${service} API key:`, error);
+        return null;
       }
       
-      if (data && data.api_key) {
-        return data.api_key;
+      if (data && data.apiKey) {
+        return data.apiKey;
       }
       
       return null;
