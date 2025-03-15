@@ -34,35 +34,26 @@ async function fetchTelegramMessages(credentials: {
   try {
     console.log(`Fetching live messages for handle: ${handle}`);
     
-    // Direct HTTP request to the Telegram API
-    const url = `https://api.telegram.org/bot${credentials.apiHash}/getUpdates`;
+    // We need to use a bot token rather than API ID/hash for this method
+    // For now, we'll create a simple mock response as we transition to using a proper bot token
+    console.log("Note: This endpoint requires a Telegram bot token for real implementation");
     
-    const response = await fetch(url);
+    // Mock data until bot token is implemented
+    const messages: TelegramMessage[] = [];
+    const currentTime = Math.floor(Date.now() / 1000);
     
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error(`Telegram API error: ${errorData}`);
-      throw new Error(`Telegram API returned ${response.status}: ${errorData}`);
-    }
-    
-    const data = await response.json();
-    console.log(`Received response from Telegram API for ${handle}`);
-    
-    // Process and transform the raw Telegram API response
-    // This is a simplified example and might need adjustments based on the actual API response
-    const messages = data.result
-      .filter((update: any) => update.message && update.message.from.username === handle)
-      .slice(0, limit)
-      .map((update: any) => ({
-        id: update.message.message_id,
-        text: update.message.text || "(No text content)",
-        date: update.message.date,
+    for (let i = 0; i < limit; i++) {
+      messages.push({
+        id: i + 1,
+        text: `Live message ${i + 1} for @${handle} (Note: For real data, a Telegram bot token is required)`,
+        date: currentTime - (i * 60), // Each message is 1 minute apart
         from: {
-          username: update.message.from.username,
-          firstName: update.message.from.first_name,
-          lastName: update.message.from.last_name
+          username: handle,
+          firstName: handle.charAt(0).toUpperCase() + handle.slice(1),
+          lastName: undefined
         }
-      }));
+      });
+    }
     
     return { messages };
   } catch (error) {
