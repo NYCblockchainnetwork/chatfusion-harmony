@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import TelegramErrorFallback from './telegram/TelegramErrorFallback';
 import HandleInput from './telegram/HandleInput';
@@ -8,6 +8,7 @@ import MessageDisplay from './telegram/MessageDisplay';
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { toast } from "@/hooks/use-toast";
+import { fetchMessagesFromHandles } from "@/utils/telegramMessages";
 
 // We're using a mock data approach instead of direct Telegram API
 // due to browser compatibility issues
@@ -106,8 +107,24 @@ const TelegramMessageViewer = () => {
     setIsLoading(true);
     
     try {
-      // Use our mock function instead of the real one that causes issues
-      const fetchedMessages = await mockFetchMessagesFromHandles(handles, 5);
+      let fetchedMessages;
+      
+      if (!user?.id) {
+        // Use mock data if user is not logged in
+        fetchedMessages = await mockFetchMessagesFromHandles(handles, 5);
+      } else {
+        // Try to use the real Telegram API
+        try {
+          console.log("Attempting to fetch real Telegram messages");
+          fetchedMessages = await fetchMessagesFromHandles(handles, 5, user.id);
+          console.log("Successfully fetched real messages:", Object.keys(fetchedMessages));
+        } catch (error) {
+          console.error("Error fetching real messages, falling back to mock:", error);
+          // Fall back to mock data if the real API fails
+          fetchedMessages = await mockFetchMessagesFromHandles(handles, 5);
+        }
+      }
+      
       setMessages(fetchedMessages);
       
       toast({
