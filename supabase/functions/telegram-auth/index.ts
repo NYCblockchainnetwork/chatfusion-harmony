@@ -1,6 +1,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.5.0";
+import { handleQRLogin } from "./qr-login.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -58,6 +59,11 @@ serve(async (req) => {
     const pathParts = url.pathname.split('/');
     const action = pathParts[pathParts.length - 1]; // Get the last segment of the path
     console.log(`Action: ${action}`);
+
+    // Handle QR login requests
+    if (action === "qr-login-token" || action === "check-qr-login") {
+      return await handleQRLogin(req, action);
+    }
 
     // Check for request body
     let data;
@@ -302,7 +308,7 @@ serve(async (req) => {
     
     // If no valid action is specified
     console.error("Invalid action specified:", action);
-    return createErrorResponse("Invalid action. Use send-code or verify-code", 400);
+    return createErrorResponse("Invalid action. Use send-code, verify-code, qr-login-token, or check-qr-login", 400);
     
   } catch (error) {
     console.error("Unhandled error in telegram-auth function:", error);

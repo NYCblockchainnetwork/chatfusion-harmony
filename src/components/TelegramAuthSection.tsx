@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -250,7 +251,7 @@ const TelegramAuthSection = () => {
     }
   };
   
-  const handleVerificationSuccess = (sessionId: string, phone: string) => {
+  const handleVerificationSuccess = (sessionId: string, phone?: string) => {
     updateSettings({
       telegramIntegrationEnabled: true,
       telegramHandles: settings?.telegramHandles || [],
@@ -264,7 +265,7 @@ const TelegramAuthSection = () => {
     
     toast({
       title: "Success",
-      description: `Connected to Telegram with phone ${phone}. You can now fetch messages.`,
+      description: `Connected to Telegram${phone ? ` with phone ${phone}` : ''}. You can now fetch messages.`,
     });
   };
   
@@ -287,7 +288,9 @@ const TelegramAuthSection = () => {
         {telegramSessions.map(session => (
           <div key={session.id} className="bg-green-50 p-3 rounded-md border border-green-200 flex justify-between items-center">
             <div>
-              <p className="text-green-700 font-medium">Phone: {session.phone}</p>
+              <p className="text-green-700 font-medium">
+                {session.phone ? `Phone: ${session.phone}` : 'QR Authentication'}
+              </p>
               <p className="text-xs text-green-600">Connected on {new Date(session.created_at).toLocaleString()}</p>
             </div>
             <Button 
@@ -303,7 +306,7 @@ const TelegramAuthSection = () => {
         
         <div className="pt-2">
           <Button variant="outline" className="w-full" onClick={() => setShowPhoneVerification(true)}>
-            Add Another Phone
+            Add Another Account
           </Button>
         </div>
       </div>
