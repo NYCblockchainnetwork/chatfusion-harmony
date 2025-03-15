@@ -30,14 +30,30 @@ serve(async (req) => {
   }
 
   try {
+    console.log("Received request to telegram-auth");
     const url = new URL(req.url);
     const action = url.pathname.split('/').pop();
+    console.log(`Action: ${action}`);
 
+    // Check for request body
+    let data;
+    try {
+      data = await req.json();
+      console.log("Request data:", JSON.stringify(data));
+    } catch (error) {
+      console.error("Error parsing request body:", error);
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     // Check for API credentials
-    const data = await req.json();
     const apiId = data.apiId || Number(Deno.env.get("telegram_api_id"));
     const apiHash = data.apiHash || Deno.env.get("telegram_api_hash");
     const userId = data.userId;
+    
+    console.log(`Using apiId: ${apiId}, userId: ${userId}`);
 
     if (!apiId || !apiHash) {
       console.error("Missing Telegram API credentials");
@@ -48,7 +64,19 @@ serve(async (req) => {
     }
 
     // Import the grm library for Deno
-    const { StringSession, TelegramClient } = await import("https://deno.land/x/grm@0.0.5/mod.ts");
+    let grmModule;
+    try {
+      grmModule = await import("https://deno.land/x/grm@0.0.5/mod.ts");
+      console.log("Successfully imported grm library");
+    } catch (error) {
+      console.error("Error importing grm library:", error);
+      return new Response(
+        JSON.stringify({ error: `Failed to import Telegram library: ${error.message}` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    const { StringSession, TelegramClient } = grmModule;
     
     // If the action is "send-code", send a verification code
     if (action === "send-code") {
@@ -68,11 +96,11 @@ serve(async (req) => {
         connectionRetries: 3,
       });
       
-      await client.connect();
-      console.log("Connected to Telegram API");
-      
-      // Send the code
       try {
+        await client.connect();
+        console.log("Connected to Telegram API");
+        
+        // Send the code
         const result = await client.sendCode(
           {
             apiId: apiId,
@@ -81,7 +109,7 @@ serve(async (req) => {
           phone
         );
         
-        console.log("Code sent successfully");
+        console.log("Code sent successfully, phoneCodeHash:", result.phoneCodeHash);
         
         // Disconnect client
         await client.disconnect();
@@ -108,7 +136,10 @@ serve(async (req) => {
       
       if (!phone || !code || !phoneCodeHash || !userId) {
         return new Response(
-          JSON.stringify({ error: "Phone number, code, phoneCodeHash, and userId are required" }),
+          JSON.stringify({ 
+            error: "Phone number, code, phoneCodeHash, and userId are required",
+            missing: { phone: !phone, code: !code, phoneCodeHash: !phoneCodeHash, userId: !userId }
+          }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -121,11 +152,11 @@ serve(async (req) => {
         connectionRetries: 3,
       });
       
-      await client.connect();
-      console.log("Connected to Telegram API");
-      
-      // Verify the code
       try {
+        await client.connect();
+        console.log("Connected to Telegram API");
+        
+        // Verify the code
         await client.signIn({
           phoneNumber: phone,
           phoneCode: code,
