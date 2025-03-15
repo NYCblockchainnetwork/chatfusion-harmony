@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { telegramClient } from "@/integrations/supabase/client";
@@ -48,7 +47,7 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
         if (error.message.includes("No active session") || 
             error.message.includes("Authentication error") ||
             error.message.includes("Invalid authentication token")) {
-          errorMessage = "Authentication failed. Please log in again.";
+          errorMessage = "Authentication failed. Please log in again and try once more.";
         }
         
         setError(errorMessage);

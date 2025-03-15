@@ -30,6 +30,11 @@ serve(async (req) => {
   try {
     console.log("Received request to get-telegram-credentials");
     
+    // Validate request method
+    if (req.method !== 'POST') {
+      return createErrorResponse("Only POST requests are allowed", 405);
+    }
+    
     // Parse authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

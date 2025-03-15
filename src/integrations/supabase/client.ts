@@ -110,11 +110,16 @@ export const telegramClient = {
     
     try {
       // Get auth headers with valid token
-      const headers = await this.getAuthHeaders();
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        throw new Error("No active session. Please login again.");
+      }
       
       const { data, error } = await supabase.functions.invoke('get-telegram-credentials', {
         body: { userId },
-        headers
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`
+        }
       });
       
       if (error) {
