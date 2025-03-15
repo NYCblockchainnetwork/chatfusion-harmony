@@ -1,31 +1,41 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { AlertCircle } from 'lucide-react';
 
 const Login = () => {
-  const { loginWithGoogle, isLoading } = useAuth();
+  const { loginWithGoogle, isLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleGoogleLogin = async () => {
     try {
       await loginWithGoogle();
-      toast({
-        title: "Login successful",
-        description: "You are now logged in",
-      });
-      navigate('/');
+      // The actual login happens via the callback in AuthContext,
+      // so we don't need to add a success handler here
     } catch (error) {
+      console.error('Login error:', error);
       toast({
         title: "Login failed",
-        description: "Could not log in with Google",
+        description: "Could not log in with Google. Please try again.",
         variant: "destructive"
       });
     }
   };
+
+  // Check if Google Client ID is set
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const isGoogleConfigMissing = !googleClientId;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -38,10 +48,20 @@ const Login = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {isGoogleConfigMissing && (
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-md flex items-start gap-2 text-amber-800 mb-4">
+                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium">Google Client ID not found</p>
+                  <p>The VITE_GOOGLE_CLIENT_ID environment variable is not set. Add it to your environment to enable Google login.</p>
+                </div>
+              </div>
+            )}
+            
             <Button 
               className="w-full flex items-center justify-center gap-2"
               onClick={handleGoogleLogin}
-              disabled={isLoading}
+              disabled={isLoading || isGoogleConfigMissing}
             >
               <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24" className="h-5 w-5">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>

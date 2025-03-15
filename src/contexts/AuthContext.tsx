@@ -17,33 +17,103 @@ type AuthContextType = {
   logout: () => void;
 };
 
+// This is a publishable client ID that is safe to include in client-side code
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useLocalStorage<User | null>('auth_user', null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authInitialized, setAuthInitialized] = useState(false);
 
+  // Load the Google API script
   useEffect(() => {
-    // Simulate checking if user is already logged in
-    setIsLoading(false);
+    if (!GOOGLE_CLIENT_ID) {
+      console.error('Google Client ID is not set. Set the VITE_GOOGLE_CLIENT_ID environment variable.');
+      setIsLoading(false);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      setAuthInitialized(true);
+    };
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
   }, []);
+
+  // Initialize Google authentication once the script is loaded
+  useEffect(() => {
+    if (!authInitialized || !GOOGLE_CLIENT_ID) {
+      return;
+    }
+
+    window.google?.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredentialResponse,
+      auto_select: false,
+      cancel_on_tap_outside: true,
+    });
+
+    setIsLoading(false);
+  }, [authInitialized]);
+
+  const handleGoogleCredentialResponse = (response: any) => {
+    if (!response?.credential) {
+      console.error('Google authentication failed: No credential');
+      return;
+    }
+
+    // Decode the JWT token to get user information
+    const decodedToken = decodeJwtResponse(response.credential);
+    const googleUser: User = {
+      id: decodedToken.sub,
+      name: decodedToken.name,
+      email: decodedToken.email,
+      photoUrl: decodedToken.picture,
+    };
+
+    setUser(googleUser);
+  };
+
+  // Function to decode the JWT token received from Google
+  const decodeJwtResponse = (token: string) => {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(function (c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        })
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  };
 
   const loginWithGoogle = async () => {
     try {
       setIsLoading(true);
       
-      // Simulate Google login process
-      // In a real app, this would use a proper OAuth flow
-      const mockGoogleUser: User = {
-        id: 'google-user-' + Math.random().toString(36).substring(2, 9),
-        name: 'Google User',
-        email: 'user@example.com',
-        photoUrl: 'https://ui-avatars.com/api/?name=Google+User&background=0D8ABC&color=fff',
-      };
-      
-      // Store the user data
-      setUser(mockGoogleUser);
-      setIsLoading(false);
+      if (!window.google || !GOOGLE_CLIENT_ID) {
+        throw new Error('Google authentication is not initialized');
+      }
+
+      // Prompt the Google login popup
+      window.google.accounts.id.prompt((notification: any) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          console.error('Google login prompt failed:', notification);
+          setIsLoading(false);
+          throw new Error('Google login failed. Please try again.');
+        }
+      });
       
       return Promise.resolve();
     } catch (error) {
@@ -55,6 +125,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     setUser(null);
+    if (window.google) {
+      window.google.accounts.id.disableAutoSelect();
+    }
   };
 
   return (

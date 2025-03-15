@@ -1,8 +1,27 @@
+
 # Welcome to your Lovable project
 
 ## Project info
 
 **URL**: https://lovable.dev/projects/5269b2ff-5d9a-4e06-9021-1473fa25e662
+
+## Configuration
+
+### Google Authentication
+
+To enable Google Authentication:
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or use an existing one
+3. Navigate to "APIs & Services" > "Credentials"
+4. Click "Create Credentials" and select "OAuth client ID"
+5. Set the application type to "Web application"
+6. Add your application URL to the authorized JavaScript origins
+7. Copy the generated Client ID
+8. Create a `.env` file in the root of your project and add:
+   ```
+   VITE_GOOGLE_CLIENT_ID=your-client-id-here
+   ```
 
 ## How can I edit this code?
 
