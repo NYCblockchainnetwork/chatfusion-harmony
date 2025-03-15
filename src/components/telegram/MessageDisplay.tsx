@@ -11,7 +11,11 @@ interface MessageDisplayProps {
 
 const MessageDisplay: React.FC<MessageDisplayProps> = ({ messages }) => {
   if (Object.keys(messages).length === 0) {
-    return null;
+    return (
+      <div className="mt-6 p-4 border rounded-lg bg-muted/30">
+        <p className="text-center text-muted-foreground">No messages loaded yet. Add a Telegram handle and click 'Fetch Messages'.</p>
+      </div>
+    );
   }
 
   const formatDate = (timestamp: string) => {
