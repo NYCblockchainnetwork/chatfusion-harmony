@@ -1,8 +1,8 @@
-
-// Utility for retrieving Telegram messages using the Telegram client API
+// Utility for retrieving real Telegram messages using the Telegram client API
 
 import { toast } from "@/hooks/use-toast";
 import { createTelegramClient, TelegramCredentials } from "@/utils/telegramClient";
+import { Api } from "telegram";
 
 export interface TelegramMessage {
   id: number;
@@ -79,11 +79,13 @@ async function processTelegramFetch(
     
     console.log("Connecting to Telegram API...");
     try {
-      // Connect to Telegram API
-      await client.connect();
-      console.log("Successfully connected to Telegram API");
+      // Connect to Telegram API - for real this time
+      if (!client.connected) {
+        await client.connect();
+        console.log("Successfully connected to Telegram API");
+      }
       
-      // Save the session string for future use if it changed
+      // Save the session string for future use
       const newSessionString = stringSession.save();
       if (newSessionString !== credentials.sessionString) {
         console.log("Saving new session string");
@@ -104,7 +106,7 @@ async function processTelegramFetch(
       try {
         console.log(`Fetching messages for @${cleanHandle}...`);
         
-        // Try to resolve the username to an entity
+        // Resolve username to entity
         let entity;
         try {
           console.log(`Resolving username: @${cleanHandle}`);
@@ -119,23 +121,33 @@ async function processTelegramFetch(
           throw new Error(`Could not find Telegram user @${cleanHandle}`);
         }
         
-        // Now fetch messages from this entity
+        // Fetch actual messages
         try {
           console.log(`Getting messages for entity:`, entity);
-          const fetchedMessages = await client.getMessages(entity, { limit });
-          console.log(`Successfully fetched ${fetchedMessages.length} raw messages for @${cleanHandle}`);
           
-          // Transform the raw messages to our TelegramMessage format
-          const transformedMessages = fetchedMessages.map(msg => ({
-            id: msg.id,
-            text: msg.text || "(No text content)",
-            timestamp: new Date(msg.date * 1000).toISOString(),
-            from: {
-              username: entity.username || "unknown",
-              firstName: entity.firstName || "User",
-              lastName: entity.lastName
-            }
-          }));
+          // Fetch most recent messages from this chat
+          const fetchedMessages = await client.getMessages(entity, {
+            limit: limit
+          });
+          
+          console.log(`Successfully fetched ${fetchedMessages.length} messages for @${cleanHandle}`);
+          
+          // Transform the messages to our format
+          const transformedMessages = fetchedMessages.map(msg => {
+            // Handle different message types and extract text content
+            const messageText = getMessageText(msg);
+            
+            return {
+              id: msg.id,
+              text: messageText || "(No text content)",
+              timestamp: new Date(msg.date * 1000).toISOString(),
+              from: {
+                username: entity.username || "unknown",
+                firstName: entity.firstName || "User",
+                lastName: entity.lastName
+              }
+            };
+          });
           
           result[cleanHandle] = transformedMessages;
           console.log(`Transformed ${transformedMessages.length} messages for @${cleanHandle}`);
@@ -163,5 +175,26 @@ async function processTelegramFetch(
   } catch (error) {
     console.error("Error in processTelegramFetch:", error);
     throw error;
+  } finally {
+    // No need to disconnect the client as it might be reused
   }
+}
+
+// Helper function to extract text from different message types
+function getMessageText(message: any): string {
+  if (!message) return "";
+  
+  // Handle regular text messages
+  if (message.message) {
+    return message.message;
+  }
+  
+  // Handle messages with media
+  if (message.media) {
+    const mediaType = message.media.className || message.media._typeName || "unknown media";
+    return `[${mediaType}] ${message.message || ""}`;
+  }
+  
+  // Other message types
+  return message.text || message.caption || "(Non-text content)";
 }

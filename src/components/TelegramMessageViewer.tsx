@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -125,7 +124,7 @@ const TelegramMessageViewer = () => {
     setError(null);
     
     try {
-      console.log("Starting to fetch messages for handles:", handles);
+      console.log("Starting to fetch real Telegram messages for handles:", handles);
       console.log("Using user ID for fetching:", user.id);
       
       const fetchedMessages = await fetchMessagesFromHandles(handles, 5, user.id);
@@ -144,15 +143,15 @@ const TelegramMessageViewer = () => {
       if (successCount > 0) {
         toast({
           title: "Success",
-          description: `Fetched messages from ${successCount} handles`,
+          description: `Fetched real messages from ${successCount} Telegram handles`,
         });
       }
     } catch (error) {
-      console.error("Error fetching messages:", error);
-      setError(error.message || "Failed to fetch messages");
+      console.error("Error fetching Telegram messages:", error);
+      setError(error.message || "Failed to fetch Telegram messages");
       toast({
         title: "Error",
-        description: error.message || "Failed to fetch messages",
+        description: error.message || "Failed to fetch Telegram messages",
         variant: "destructive"
       });
     } finally {

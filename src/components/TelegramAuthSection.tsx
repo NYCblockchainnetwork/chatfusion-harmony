@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +10,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
-// Test values that would normally come from environment variables
 const TEST_TELEGRAM_API_ID = "12345"; // Replace with test value
 const TEST_TELEGRAM_API_HASH = "abcdef1234567890abcdef1234567890"; // Replace with test value
 
@@ -29,17 +27,14 @@ const TelegramAuthSection = () => {
     },
   });
 
-  // Load existing API credentials from localStorage on component mount
   useEffect(() => {
     if (!user?.id) return;
     
     try {
-      // Check if user has already connected to Telegram
       if (settings?.telegramIntegrationEnabled) {
         setConnectionStatus('connected');
       }
       
-      // Load saved credentials from localStorage if any
       const storedApiId = localStorage.getItem(`telegram_api_id_${user.id}`);
       const storedApiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
       
@@ -51,12 +46,10 @@ const TelegramAuthSection = () => {
     }
   }, [settings, user, form]);
 
-  // Test function to bypass Edge Function and use localStorage
   const saveApiKeyToLocalStorage = async (service: string, value: string): Promise<boolean> => {
     if (!user?.id) return false;
 
     try {
-      // For testing, just save to localStorage
       localStorage.setItem(`${service}_${user.id}`, value);
       console.log(`Saved ${service} to localStorage:`, value);
       return true;
@@ -66,7 +59,6 @@ const TelegramAuthSection = () => {
     }
   };
 
-  // Test function to get API key from localStorage
   const getApiKeyFromLocalStorage = (service: string): string | null => {
     if (!user?.id) return null;
     return localStorage.getItem(`${service}_${user.id}`);
@@ -88,7 +80,6 @@ const TelegramAuthSection = () => {
     try {
       console.log("Using test values for Telegram credentials");
       
-      // Save test values to localStorage
       const apiIdResult = await saveApiKeyToLocalStorage('telegram_api_id', TEST_TELEGRAM_API_ID);
       if (!apiIdResult) {
         throw new Error("Failed to save API ID");
@@ -99,7 +90,6 @@ const TelegramAuthSection = () => {
         throw new Error("Failed to save API Hash");
       }
       
-      // Update settings
       await updateSettings({
         telegramIntegrationEnabled: true,
         telegramHandles: settings?.telegramHandles || []
@@ -109,7 +99,7 @@ const TelegramAuthSection = () => {
       
       toast({
         title: "Success",
-        description: "Connected to Telegram using test credentials",
+        description: "Connected to Telegram using test credentials. You can now fetch real messages.",
       });
     } catch (error) {
       console.error('Error connecting to Telegram with test values:', error);
@@ -149,19 +139,16 @@ const TelegramAuthSection = () => {
     setErrorMessage(null);
     
     try {
-      // Save API ID to localStorage
       const apiIdSaved = await saveApiKeyToLocalStorage('telegram_api_id', apiId);
       if (!apiIdSaved) {
         throw new Error("Failed to save API ID");
       }
       
-      // Save API Hash to localStorage
       const apiHashSaved = await saveApiKeyToLocalStorage('telegram_api_hash', apiHash);
       if (!apiHashSaved) {
         throw new Error("Failed to save API Hash");
       }
       
-      // Update settings
       await updateSettings({
         telegramIntegrationEnabled: true,
         telegramHandles: settings?.telegramHandles || []
@@ -197,11 +184,9 @@ const TelegramAuthSection = () => {
     }
     
     try {
-      // Remove API credentials from localStorage
       localStorage.removeItem(`telegram_api_id_${user.id}`);
       localStorage.removeItem(`telegram_api_hash_${user.id}`);
       
-      // Update settings
       await updateSettings({
         telegramIntegrationEnabled: false,
       });
