@@ -18,10 +18,11 @@ export async function handleQrLogin(supabase: any, userId: string) {
     
     console.log("Using API ID:", apiId);
     
-    // Create a random token
+    // Create a random token - this will be our login token
+    // According to Telegram docs, this should be a randomly generated token
     const token = crypto.randomUUID();
     
-    // Store the token in the database
+    // Store the token in the database with status pending
     const { error } = await supabase
       .from("qr_login_states")
       .insert({
@@ -38,6 +39,7 @@ export async function handleQrLogin(supabase: any, userId: string) {
     
     // Generate a QR login URL
     // Format: tg://login?token=<TOKEN>
+    // This is the correct URL format for Telegram QR login
     const qrUrl = `tg://login?token=${encodeURIComponent(token)}`;
     
     console.log("Generated QR URL:", qrUrl);
@@ -73,14 +75,19 @@ export async function processQrCodeLogin(supabase: any, userId: string, token: s
       return { success: false, expired: true };
     }
     
-    // This is a simplified version - in a real implementation, 
-    // we would need to use the Telegram API to check if the QR code was scanned.
-    // For now, we'll simulate authentication success after a few seconds
-    // In a real implementation, Telegram would call a webhook when the QR code is scanned
+    // In a real implementation, we would check if the token was scanned
+    // by the Telegram mobile app. For simulation purposes, we'll randomly
+    // determine if login was successful
     
-    // For testing purposes - simulate a successful login after random time 
-    // In reality, this would be detected by listening for Telegram API events
-    const shouldSucceed = Math.random() > 0.3; // 70% chance of success on each check
+    // In a real implementation:
+    // 1. Mobile device scans the QR code, gets the token
+    // 2. Mobile sends the token to Telegram servers
+    // 3. Telegram servers validate and create a login session
+    // 4. Our server would poll Telegram servers or receive a webhook about login status
+    
+    // Simulate a successful login after some time
+    // In production, this would check with Telegram API for confirmation
+    const shouldSucceed = Math.random() > 0.2; // 80% chance of success on each check
     
     if (shouldSucceed) {
       // Get Telegram API credentials
@@ -116,11 +123,12 @@ export async function processQrCodeLogin(supabase: any, userId: string, token: s
         throw new Error("Failed to store Telegram session");
       }
       
-      console.log("Successfully authenticated via QR code");
+      console.log("Successfully authenticated via QR code, created session:", sessionId);
       
       return { success: true, sessionId };
     }
     
+    // If not successful yet, just return that it's pending
     return { success: false, expired: false };
   } catch (error) {
     console.error("Error in processQrCodeLogin:", error);

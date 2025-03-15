@@ -53,6 +53,7 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
     try {
       console.log("Generating QR code for user:", user.id);
       
+      // Get QR login token
       const result = await initializedTelegramClient.getQRLoginToken(user.id);
       
       console.log("QR token result:", result);
@@ -61,6 +62,7 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
         throw new Error("Failed to generate QR code token");
       }
       
+      // Set the QR code URL and token
       setQrLink(result.qrUrl);
       setToken(result.token);
       
@@ -86,10 +88,12 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
     try {
       console.log("Checking QR code status for token:", token);
       
+      // Check the status of the QR login
       const result = await initializedTelegramClient.checkQRLoginStatus(user.id, token);
       
       console.log("QR status check result:", result);
       
+      // If login was successful
       if (result.success) {
         console.log("QR code login confirmed with sessionId:", result.sessionId);
         onSuccess(result.sessionId);
@@ -99,6 +103,7 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
           description: "Successfully connected via QR code",
         });
       } else if (result.expired) {
+        // If the token has expired
         setErrorMessage("QR code has expired. Please refresh.");
         setToken(null);
         setQrLink(null);
