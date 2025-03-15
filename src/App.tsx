@@ -10,7 +10,9 @@ import { useState, useEffect } from "react";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import Settings from "./pages/Settings";
 
+// Create a query client with defaults
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -22,6 +24,7 @@ const queryClient = new QueryClient({
 
 const App = () => {
   const [error, setError] = useState<Error | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Global error handler
   useEffect(() => {
@@ -31,8 +34,38 @@ const App = () => {
     };
 
     window.addEventListener("error", handleError);
+    
+    // Initialize the app and check for compatibility
+    const checkCompatibility = async () => {
+      try {
+        // Check if we're in a browser environment where Buffer isn't available
+        if (typeof window !== 'undefined' && typeof Buffer === 'undefined') {
+          console.warn("Running in browser environment without Buffer support. Using mock implementation.");
+        }
+        setIsLoading(false);
+      } catch (err) {
+        console.error("Initialization error:", err);
+        setError(err instanceof Error ? err : new Error("Unknown initialization error"));
+        setIsLoading(false);
+      }
+    };
+    
+    checkCompatibility();
+    
     return () => window.removeEventListener("error", handleError);
   }, []);
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading application...</p>
+        </div>
+      </div>
+    );
+  }
 
   // If there's a critical error, display it instead of the app
   if (error) {
@@ -79,6 +112,14 @@ const App = () => {
                 element={
                   <AuthGuard>
                     <Index />
+                  </AuthGuard>
+                } 
+              />
+              <Route 
+                path="/settings" 
+                element={
+                  <AuthGuard>
+                    <Settings />
                   </AuthGuard>
                 } 
               />

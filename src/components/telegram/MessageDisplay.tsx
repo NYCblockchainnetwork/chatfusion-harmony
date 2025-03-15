@@ -1,8 +1,9 @@
 
 import React from 'react';
-import { AlertCircle, MessageCircle, User } from "lucide-react";
+import { MessageCircle, User, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
 import { TelegramMessage } from '@/utils/telegramMessages';
 
 interface MessageDisplayProps {
@@ -10,16 +11,28 @@ interface MessageDisplayProps {
 }
 
 const MessageDisplay: React.FC<MessageDisplayProps> = ({ messages }) => {
-  if (Object.keys(messages).length === 0) {
+  if (!messages || Object.keys(messages).length === 0) {
     return (
-      <div className="mt-6 p-4 border rounded-lg bg-muted/30">
-        <p className="text-center text-muted-foreground">No messages loaded yet. Add a Telegram handle and click 'Fetch Messages'.</p>
-      </div>
+      <Card className="mt-6">
+        <CardContent className="pt-6">
+          <div className="flex flex-col items-center justify-center text-center p-6 border border-dashed rounded-lg bg-gray-50">
+            <MessageCircle className="h-8 w-8 text-gray-400 mb-2" />
+            <h3 className="text-base font-medium text-gray-700">No Messages</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Add a Telegram handle and click 'Fetch Messages' to load conversations.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   const formatDate = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString();
+    try {
+      return new Date(timestamp).toLocaleString();
+    } catch (e) {
+      return "Invalid date";
+    }
   };
 
   return (
