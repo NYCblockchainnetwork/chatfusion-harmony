@@ -42,77 +42,116 @@ serve(async (req) => {
           console.log("API ID exists:", !!apiId);
           console.log("API Hash exists:", !!apiHash);
           
-          // Create a proper StringSession instance
-          const stringSession = new StringSession("");
+          // Initialize StringSession with proper error handling
+          let stringSession;
+          try {
+            stringSession = new StringSession(""); // Empty string for new session
+            console.log("StringSession initialized successfully");
+          } catch (err) {
+            console.error("Error creating StringSession:", err);
+            return createResponse({
+              valid: false,
+              error: "Failed to initialize session: " + (err.message || "Unknown error")
+            }, 400);
+          }
           
-          // Create the client with proper configuration for web environments
+          console.log("Creating TelegramClient instance...");
+          
+          // Create the client with updated configuration for web environments
           const client = new TelegramClient(
             stringSession,
             parseInt(apiId, 10), 
             apiHash, 
             {
-              connectionRetries: 2,
+              connectionRetries: 5,
               useWSS: true,
-              timeout: 10000,
-              baseLogger: console
+              baseLogger: console,
+              deviceModel: "Edge Function",
+              systemVersion: "Deno",
+              appVersion: "1.0.0",
+              langCode: "en",
+              systemLangCode: "en"
             }
           );
           
-          // Use proper async connection with minimal configuration
-          await client.start({
-            phoneNumber: async () => "",
-            password: async () => "",
-            onError: (err) => console.error("Connection error:", err),
-            phoneCode: async () => "",
-          });
+          console.log("TelegramClient instance created, starting connection...");
           
-          console.log("Successfully connected to Telegram with provided credentials");
-          await client.disconnect();
-          
-          // If we reached here, credentials are valid
-          // Store them in Supabase user_api_keys table if userId is provided
-          if (userId) {
-            // Store API ID
-            const { error: apiIdError } = await supabase
-              .from("user_api_keys")
-              .upsert(
-                {
-                  user_id: userId,
-                  service: "telegram_api_id",
-                  api_key: apiId,
-                  updated_at: new Date().toISOString(),
-                },
-                { onConflict: "user_id,service" }
-              );
+          try {
+            // Initialize the client with minimal configuration
+            await client.start({
+              phoneNumber: async () => "",
+              password: async () => "",
+              phoneCode: async () => "",
+              onError: (err) => {
+                console.error("Client initialization error:", err);
+                throw new Error("Client initialization failed: " + err);
+              },
+            });
+
+            console.log("Successfully initialized Telegram client");
             
-            if (apiIdError) {
-              console.error("Error storing API ID:", apiIdError);
-              // Continue anyway, this is not critical
+            // Save the session string for debugging
+            const sessionString = stringSession.save();
+            console.log("Session string generated:", !!sessionString);
+            
+            await client.disconnect();
+            console.log("Client disconnected successfully");
+            
+            // If we reached here, credentials are valid
+            // Store them in Supabase user_api_keys table if userId is provided
+            if (userId) {
+              // Store API ID
+              const { error: apiIdError } = await supabase
+                .from("user_api_keys")
+                .upsert(
+                  {
+                    user_id: userId,
+                    service: "telegram_api_id",
+                    api_key: apiId,
+                    updated_at: new Date().toISOString(),
+                  },
+                  { onConflict: "user_id,service" }
+                );
+              
+              if (apiIdError) {
+                console.error("Error storing API ID:", apiIdError);
+                // Continue anyway, this is not critical
+              } else {
+                console.log("API ID stored successfully");
+              }
+              
+              // Store API Hash
+              const { error: apiHashError } = await supabase
+                .from("user_api_keys")
+                .upsert(
+                  {
+                    user_id: userId,
+                    service: "telegram_api_hash",
+                    api_key: apiHash,
+                    updated_at: new Date().toISOString(),
+                  },
+                  { onConflict: "user_id,service" }
+                );
+              
+              if (apiHashError) {
+                console.error("Error storing API Hash:", apiHashError);
+                // Continue anyway, this is not critical
+              } else {
+                console.log("API Hash stored successfully");
+              }
             }
             
-            // Store API Hash
-            const { error: apiHashError } = await supabase
-              .from("user_api_keys")
-              .upsert(
-                {
-                  user_id: userId,
-                  service: "telegram_api_hash",
-                  api_key: apiHash,
-                  updated_at: new Date().toISOString(),
-                },
-                { onConflict: "user_id,service" }
-              );
-            
-            if (apiHashError) {
-              console.error("Error storing API Hash:", apiHashError);
-              // Continue anyway, this is not critical
-            }
+            return createResponse({ 
+              valid: true, 
+              message: "Credentials valid and successfully connected to Telegram" 
+            });
+          } catch (initErr) {
+            console.error("Error initializing client:", initErr);
+            return createResponse({
+              valid: false,
+              error: "Failed to initialize Telegram client: " + (initErr.message || "Unknown error")
+            }, 400);
           }
-          
-          return createResponse({ 
-            valid: true, 
-            message: "Credentials valid and successfully connected to Telegram" 
-          });
         } catch (validationErr) {
           console.error("Error validating credentials:", validationErr);
           return createResponse({
