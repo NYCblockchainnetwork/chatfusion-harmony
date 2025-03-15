@@ -27,8 +27,9 @@ const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
         placeholder="+1234567890"
         value={phone}
         onChange={onChange}
-        className={`w-full ${error ? 'border-red-500' : ''}`}
+        className={`w-full ${error ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
         disabled={disabled}
+        autoComplete="tel"
       />
       {error ? (
         <p className="text-xs text-red-500">

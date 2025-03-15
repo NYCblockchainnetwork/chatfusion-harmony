@@ -2,6 +2,7 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 interface LoadingStateProps {
   title?: string;
@@ -16,6 +17,14 @@ const LoadingState: React.FC<LoadingStateProps> = ({
   error = null,
   onRetry
 }) => {
+  // Check if error is authentication related
+  const isAuthError = error && (
+    error.includes("Authentication") || 
+    error.includes("auth") || 
+    error.includes("logged in") ||
+    error.includes("session")
+  );
+
   return (
     <Card>
       <CardHeader>
@@ -26,15 +35,18 @@ const LoadingState: React.FC<LoadingStateProps> = ({
         {error ? (
           <>
             <div className="text-destructive text-sm mb-2">
-              There was an error connecting to Telegram. This may be due to a server configuration issue.
+              {isAuthError 
+                ? "There was an authentication error. Please make sure you are logged in." 
+                : "There was an error connecting to Telegram. This may be due to a server configuration issue."}
             </div>
             {onRetry && (
-              <button 
+              <Button 
                 onClick={onRetry}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                variant="default"
+                className="px-4 py-2"
               >
                 Try Again
-              </button>
+              </Button>
             )}
           </>
         ) : (
