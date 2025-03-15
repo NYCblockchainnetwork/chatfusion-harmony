@@ -24,7 +24,7 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
   onCancel
 }) => {
   const { isAuthenticated, user } = useAuth();
-  const [authMethod, setAuthMethod] = useState<"phone" | "qr">("qr"); // Default to QR authentication
+  const [activeTab, setActiveTab] = useState<"qr" | "phone">("qr"); // Default to QR authentication
   
   useEffect(() => {
     if (!isAuthenticated) {
@@ -80,7 +80,7 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Tabs defaultValue="qr" onValueChange={(value) => setAuthMethod(value as "phone" | "qr")}>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "qr" | "phone")} defaultValue="qr">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="qr">QR Code</TabsTrigger>
             <TabsTrigger value="phone">Phone Number</TabsTrigger>

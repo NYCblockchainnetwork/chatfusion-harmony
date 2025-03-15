@@ -41,7 +41,7 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({
         throw new Error("Failed to generate QR login token");
       }
       
-      console.log("QR token generated successfully");
+      console.log("QR token generated successfully:", result);
       setQrToken(result.token);
       setQrUrl(result.qrUrl);
       setIsPolling(true);
