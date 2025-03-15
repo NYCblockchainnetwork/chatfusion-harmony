@@ -41,7 +41,7 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ messages, isMockMode = 
       <h3 className="text-lg font-medium">Recent Messages</h3>
       
       {isMockMode && (
-        <Alert variant="warning" className="bg-amber-50 border-amber-100 text-amber-800 mb-3">
+        <Alert className="bg-amber-50 border-amber-100 text-amber-800 mb-3">
           <Info className="h-4 w-4 text-amber-500" />
           <AlertDescription>
             These are mock messages. Real-time Telegram API integration is unavailable in this environment.
