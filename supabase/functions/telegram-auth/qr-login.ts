@@ -1,7 +1,9 @@
 
-import { StringSession } from "https://esm.sh/telegram@2.26.22/sessions";
-import { TelegramClient } from "https://esm.sh/telegram@2.26.22";
+import { CustomStringSession } from "./custom-session.ts";
 import QRCode from "https://esm.sh/qrcode@1.5.3";
+
+// Using a direct import strategy that works better with Deno
+import { TelegramClient } from "https://esm.sh/v135/telegram@2.26.22/X-ZS8q/deno/telegram.mjs";
 
 // Function to handle QR login initialization
 export async function handleQrLogin(supabase, userId) {
@@ -36,91 +38,98 @@ export async function handleQrLogin(supabase, userId) {
     const apiId = apiIdData.api_key;
     const apiHash = apiHashData.api_key;
     
-    // Initialize Telegram client
+    // Initialize Telegram client with custom session
     console.log("Initializing Telegram client with API ID:", apiId);
     
-    // Initialize StringSession with proper error handling
-    let stringSession;
-    try {
-      stringSession = new StringSession("");
-      console.log("StringSession initialized successfully for QR login");
-    } catch (err) {
-      console.error("Error creating StringSession for QR login:", err);
-      return { error: "Failed to initialize session: " + (err.message || "Unknown error") };
-    }
+    // Create custom session
+    const session = new CustomStringSession("");
+    console.log("QR login: Session created with type:", session.constructor.name);
 
-    // Create the client with proper configuration for web environments
+    // Create the client with proper configuration for Deno environment
     const client = new TelegramClient(
-      stringSession, 
-      parseInt(apiId, 10), 
-      apiHash, 
+      session,
+      parseInt(apiId, 10),
+      apiHash,
       {
-        connectionRetries: 5,
+        connectionRetries: 3,
         useWSS: true,
         baseLogger: console,
-        deviceModel: "Edge Function",
-        systemVersion: "Deno",
+        deviceModel: "Deno Edge Function",
+        systemVersion: "Windows",
         appVersion: "1.0.0",
         langCode: "en",
-        systemLangCode: "en"
+        systemLangCode: "en",
+        initConnectionParams: {
+          apiId: parseInt(apiId, 10),
+          deviceModel: "Deno Edge Function",
+          systemVersion: "Windows",
+          appVersion: "1.0.0",
+          langCode: "en",
+          systemLangCode: "en",
+        }
       }
     );
     
     try {
-      // Initialize the client with minimal configuration
-      await client.start({
-        phoneNumber: async () => "",
-        password: async () => "",
-        phoneCode: async () => "",
-        onError: (err) => {
-          console.error("Client initialization error in QR login:", err);
-          throw new Error("Client initialization failed in QR login: " + err);
-        },
-      });
+      // Set a connection timeout
+      const connectionTimeout = setTimeout(() => {
+        console.error("QR login: Connection timeout after 15 seconds");
+        client.disconnect();
+      }, 15000);
       
-      console.log("Connected to Telegram for QR login");
-      
-      // Generate QR login data
-      console.log("Generating QR login token...");
-      const { token, expires } = await client.qrLogin({ 
-        qrCode: true,
-        onError: (errorMessage) => {
-          console.error("QR login error:", errorMessage);
-          return { qrError: errorMessage };
-        }
-      });
-      
-      console.log("QR login token generated:", !!token);
-      console.log("QR login token expires in:", expires, "seconds");
-      
-      // Generate QR code URL
-      const qrUrl = await QRCode.toDataURL(token.url);
-      console.log("Generated QR code URL");
-      
-      // Store token, session, and expiry in database
-      const expiresAt = new Date(Date.now() + expires * 1000).toISOString();
-      const { error: insertError } = await supabase
-        .from("qr_login_states")
-        .insert({
-          user_id: userId,
-          token: token.token,
-          expires_at: expiresAt,
-          session_string: stringSession.save()
+      try {
+        console.log("QR login: Connecting to Telegram...");
+        await client.connect();
+        clearTimeout(connectionTimeout);
+        
+        console.log("QR login: Connected to Telegram");
+        
+        // Generate QR login data
+        console.log("Generating QR login token...");
+        const { token, expires } = await client.qrLogin({ 
+          qrCode: true,
+          onError: (errorMessage) => {
+            console.error("QR login error:", errorMessage);
+            return { qrError: errorMessage };
+          }
         });
-      
-      if (insertError) {
-        console.error("Error storing QR login state:", insertError);
-        return { error: "Failed to store QR login state" };
+        
+        console.log("QR login token generated:", !!token);
+        console.log("QR login token expires in:", expires, "seconds");
+        
+        // Generate QR code URL
+        const qrUrl = await QRCode.toDataURL(token.url);
+        console.log("Generated QR code URL");
+        
+        // Store token, session, and expiry in database
+        const expiresAt = new Date(Date.now() + expires * 1000).toISOString();
+        const { error: insertError } = await supabase
+          .from("qr_login_states")
+          .insert({
+            user_id: userId,
+            token: token.token,
+            expires_at: expiresAt,
+            session_string: session.save()
+          });
+        
+        if (insertError) {
+          console.error("Error storing QR login state:", insertError);
+          return { error: "Failed to store QR login state" };
+        }
+        
+        return {
+          token: token.token,
+          qrUrl,
+          expiresAt
+        };
+      } catch (err) {
+        clearTimeout(connectionTimeout);
+        console.error("Error in QR login client initialization:", err);
+        return { error: "Failed to initialize Telegram client: " + (err.message || "Unknown error") };
       }
-      
-      return {
-        token: token.token,
-        qrUrl,
-        expiresAt
-      };
     } catch (err) {
-      console.error("Error in QR login client initialization:", err);
-      return { error: "Failed to initialize Telegram client: " + (err.message || "Unknown error") };
+      console.error("Error in QR login process:", err);
+      return { error: err.message || "Failed to initiate QR login" };
     }
   } catch (err) {
     console.error("Error in QR login process:", err);
@@ -186,95 +195,101 @@ export async function processQrCodeLogin(supabase, userId, token) {
     // Create client with saved session
     console.log("Restoring session from saved state...");
     
-    // Initialize StringSession with proper error handling
-    let stringSession;
-    try {
-      stringSession = new StringSession(loginState.session_string);
-      console.log("StringSession restored successfully");
-    } catch (err) {
-      console.error("Error restoring StringSession:", err);
-      return { success: false, error: "Failed to restore session: " + (err.message || "Unknown error") };
-    }
+    // Initialize with custom session handler
+    const session = new CustomStringSession(loginState.session_string);
     
-    // Create the client with proper configuration for web environments
+    // Create the client with proper configuration for Deno environment
     const client = new TelegramClient(
-      stringSession, 
-      parseInt(apiId, 10), 
-      apiHash, 
+      session,
+      parseInt(apiId, 10),
+      apiHash,
       {
-        connectionRetries: 5,
+        connectionRetries: 3,
         useWSS: true,
         baseLogger: console,
-        deviceModel: "Edge Function",
-        systemVersion: "Deno",
+        deviceModel: "Deno Edge Function",
+        systemVersion: "Windows",
         appVersion: "1.0.0",
         langCode: "en",
-        systemLangCode: "en"
+        systemLangCode: "en",
+        initConnectionParams: {
+          apiId: parseInt(apiId, 10),
+          deviceModel: "Deno Edge Function",
+          systemVersion: "Windows",
+          appVersion: "1.0.0",
+          langCode: "en",
+          systemLangCode: "en",
+        }
       }
     );
     
     try {
-      // Initialize the client with minimal configuration
-      await client.start({
-        phoneNumber: async () => "",
-        password: async () => "",
-        phoneCode: async () => "",
-        onError: (err) => {
-          console.error("Client initialization error in QR status check:", err);
-          throw new Error("Client initialization failed in QR status check: " + err);
-        },
-      });
+      // Set a connection timeout
+      const connectionTimeout = setTimeout(() => {
+        console.error("QR check: Connection timeout after 15 seconds");
+        client.disconnect();
+      }, 15000);
       
-      console.log("Connected to Telegram with saved session");
-      
-      // Check authorization status
-      const isAuthorized = await client.isUserAuthorized();
-      console.log("User authorization status:", isAuthorized);
-      
-      if (isAuthorized) {
-        console.log("User is authorized");
+      try {
+        console.log("QR check: Connecting to Telegram...");
+        await client.connect();
+        clearTimeout(connectionTimeout);
         
-        // Get user information
-        const me = await client.getMe();
-        console.log("Got user info:", me);
+        console.log("Connected to Telegram with saved session");
         
-        const phoneNumber = me.phone ? me.phone : null;
+        // Check authorization status
+        const isAuthorized = await client.isUserAuthorized();
+        console.log("User authorization status:", isAuthorized);
         
-        // Create a session record
-        const { data: session, error: sessionError } = await supabase
-          .from("telegram_sessions")
-          .insert({
-            user_id: userId,
-            session_string: stringSession.save(),
-            phone: phoneNumber || "QR authenticated",
-            is_active: true
-          })
-          .select()
-          .single();
-        
-        if (sessionError) {
-          console.error("Error creating session record:", sessionError);
-          return { success: false, error: "Failed to create session record" };
+        if (isAuthorized) {
+          console.log("User is authorized");
+          
+          // Get user information
+          const me = await client.getMe();
+          console.log("Got user info:", me);
+          
+          const phoneNumber = me.phone ? me.phone : null;
+          
+          // Create a session record
+          const { data: session, error: sessionError } = await supabase
+            .from("telegram_sessions")
+            .insert({
+              user_id: userId,
+              session_string: session.save(),
+              phone: phoneNumber || "QR authenticated",
+              is_active: true
+            })
+            .select()
+            .single();
+          
+          if (sessionError) {
+            console.error("Error creating session record:", sessionError);
+            return { success: false, error: "Failed to create session record" };
+          }
+          
+          // Clean up QR login state
+          await supabase
+            .from("qr_login_states")
+            .delete()
+            .eq("id", loginState.id);
+          
+          return { 
+            success: true, 
+            sessionId: session.id,
+            phone: phoneNumber || "QR authenticated"
+          };
+        } else {
+          console.log("User is not authorized yet");
+          return { success: false, expired: false };
         }
-        
-        // Clean up QR login state
-        await supabase
-          .from("qr_login_states")
-          .delete()
-          .eq("id", loginState.id);
-        
-        return { 
-          success: true, 
-          sessionId: session.id,
-          phone: phoneNumber || "QR authenticated"
-        };
-      } else {
-        console.log("User is not authorized yet");
-        return { success: false, expired: false };
+      } catch (err) {
+        clearTimeout(connectionTimeout);
+        console.error("Error checking authorization status:", err);
+        return { success: false, error: "Failed to check authorization status: " + (err.message || "Unknown error") };
       }
     } catch (err) {
-      console.error("Error checking authorization status:", err);
-      return { success: false, error: "Failed to check authorization status: " + (err.message || "Unknown error") };
+      console.error("Error processing QR login:", err);
+      return { success: false, error: err.message || "Error processing QR login" };
     }
   } catch (err) {
     console.error("Error processing QR login:", err);

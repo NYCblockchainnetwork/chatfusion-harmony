@@ -16,6 +16,25 @@ export async function validateTelegramCredentials(
     return { valid: false, message: "API ID and API Hash are required" };
   }
   
+  // Basic validation checks before calling edge function
+  if (!/^\d+$/.test(apiId)) {
+    toast({
+      title: "Validation Error",
+      description: "API ID must be a number",
+      variant: "destructive"
+    });
+    return { valid: false, message: "API ID must be a number" };
+  }
+  
+  if (apiHash.length < 10) {
+    toast({
+      title: "Validation Error",
+      description: "API Hash appears to be invalid",
+      variant: "destructive"
+    });
+    return { valid: false, message: "API Hash appears to be invalid" };
+  }
+  
   try {
     console.log("Validating Telegram credentials...");
     
