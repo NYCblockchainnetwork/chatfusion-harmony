@@ -2,6 +2,7 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import TelegramAuthSection from '@/components/TelegramAuthSection';
+import TelegramMessageViewer from '@/components/TelegramMessageViewer';
 import Header from '@/components/Header';
 
 const Index = () => {
@@ -20,6 +21,8 @@ const Index = () => {
           <div className="grid grid-cols-1 gap-8">
             <TelegramAuthSection />
             
+            <TelegramMessageViewer />
+            
             <Card>
               <CardHeader>
                 <CardTitle>Pipedrive Integration</CardTitle>
@@ -30,20 +33,6 @@ const Index = () => {
               <CardContent>
                 <p className="text-sm text-gray-500">
                   Pipedrive integration will be implemented in the next phase.
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle>Message Management</CardTitle>
-                <CardDescription>
-                  Configure which Telegram chats to process
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-500">
-                  Message filters and management will be implemented in the next phase.
                 </p>
               </CardContent>
             </Card>

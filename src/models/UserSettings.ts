@@ -5,6 +5,7 @@ export interface UserSettings {
   notifications: boolean;
   telegramIntegrationEnabled: boolean;
   telegramChatId?: string;
+  telegramHandles?: string[]; // Added this field to store the handles
   pipedriveIntegrationEnabled: boolean;
   pipedriveApiKey?: string;
   lastAccessedAt: string;
@@ -28,6 +29,7 @@ export const getDefaultUserSettings = (userId: string): Partial<UserSettings> =>
   theme: 'system',
   notifications: true,
   telegramIntegrationEnabled: false,
+  telegramHandles: [], // Default to empty array
   pipedriveIntegrationEnabled: false,
   lastAccessedAt: new Date().toISOString(),
   createdAt: new Date().toISOString(),
