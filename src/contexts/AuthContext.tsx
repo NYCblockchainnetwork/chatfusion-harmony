@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/use-local-storage';
+import { toast } from '@/hooks/use-toast';
 
 type User = {
   id: string;
@@ -26,6 +27,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useLocalStorage<User | null>('auth_user', null);
   const [isLoading, setIsLoading] = useState(true);
   const [authInitialized, setAuthInitialized] = useState(false);
+  const [googleScriptLoaded, setGoogleScriptLoaded] = useState(false);
 
   // Load the Google API script
   useEffect(() => {
@@ -35,52 +37,98 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    // Check if script already exists
+    if (document.querySelector('script[src="https://accounts.google.com/gsi/client"]')) {
+      setGoogleScriptLoaded(true);
+      return;
+    }
+
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
     script.onload = () => {
-      setAuthInitialized(true);
+      setGoogleScriptLoaded(true);
+    };
+    script.onerror = (error) => {
+      console.error('Failed to load Google Sign-In script:', error);
+      toast({
+        title: "Authentication Error",
+        description: "Failed to load Google authentication service.",
+        variant: "destructive"
+      });
+      setIsLoading(false);
     };
     document.body.appendChild(script);
 
     return () => {
-      document.body.removeChild(script);
+      const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+      if (existingScript) {
+        document.body.removeChild(existingScript);
+      }
     };
   }, []);
 
   // Initialize Google authentication once the script is loaded
   useEffect(() => {
-    if (!authInitialized || !GOOGLE_CLIENT_ID) {
+    if (!googleScriptLoaded || !GOOGLE_CLIENT_ID) {
       return;
     }
 
-    window.google?.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleCredentialResponse,
-      auto_select: false,
-      cancel_on_tap_outside: true,
-    });
-
-    setIsLoading(false);
-  }, [authInitialized]);
+    try {
+      window.google?.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredentialResponse,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+      setAuthInitialized(true);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Google Sign-In initialization error:', error);
+      toast({
+        title: "Authentication Error",
+        description: "Failed to initialize Google authentication.",
+        variant: "destructive"
+      });
+      setIsLoading(false);
+    }
+  }, [googleScriptLoaded]);
 
   const handleGoogleCredentialResponse = (response: any) => {
-    if (!response?.credential) {
-      console.error('Google authentication failed: No credential');
-      return;
+    try {
+      if (!response?.credential) {
+        console.error('Google authentication failed: No credential');
+        toast({
+          title: "Authentication Error",
+          description: "Failed to receive credentials from Google.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Decode the JWT token to get user information
+      const decodedToken = decodeJwtResponse(response.credential);
+      const googleUser: User = {
+        id: decodedToken.sub,
+        name: decodedToken.name,
+        email: decodedToken.email,
+        photoUrl: decodedToken.picture,
+      };
+
+      setUser(googleUser);
+      toast({
+        title: "Authentication Successful",
+        description: `Signed in as ${googleUser.name}`,
+      });
+    } catch (error) {
+      console.error('Error processing Google credentials:', error);
+      toast({
+        title: "Authentication Error",
+        description: "Failed to process Google credentials.",
+        variant: "destructive"
+      });
     }
-
-    // Decode the JWT token to get user information
-    const decodedToken = decodeJwtResponse(response.credential);
-    const googleUser: User = {
-      id: decodedToken.sub,
-      name: decodedToken.name,
-      email: decodedToken.email,
-      photoUrl: decodedToken.picture,
-    };
-
-    setUser(googleUser);
   };
 
   // Function to decode the JWT token received from Google
@@ -99,27 +147,90 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithGoogle = async () => {
-    try {
-      setIsLoading(true);
-      
-      if (!window.google || !GOOGLE_CLIENT_ID) {
-        throw new Error('Google authentication is not initialized');
-      }
-
-      // Prompt the Google login popup
-      window.google.accounts.id.prompt((notification: any) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          console.error('Google login prompt failed:', notification);
+    return new Promise<void>((resolve, reject) => {
+      try {
+        setIsLoading(true);
+        
+        if (!window.google || !authInitialized || !GOOGLE_CLIENT_ID) {
+          const error = new Error('Google authentication is not initialized');
+          console.error(error);
           setIsLoading(false);
-          throw new Error('Google login failed. Please try again.');
+          reject(error);
+          return;
         }
+
+        // Add a timeout to handle cases where Google prompt never returns
+        const timeoutId = setTimeout(() => {
+          setIsLoading(false);
+          const error = new Error('Google login timed out. Please try again.');
+          console.error(error);
+          reject(error);
+        }, 30000); // 30 second timeout
+
+        // Display One Tap UI or prompt selector
+        window.google.accounts.id.prompt((notification: any) => {
+          clearTimeout(timeoutId);
+          
+          if (notification.isNotDisplayed()) {
+            console.error('Google One Tap not displayed:', notification.getNotDisplayedReason());
+            setIsLoading(false);
+            
+            // Instead of rejecting here, we'll render the button
+            if (notification.getNotDisplayedReason() === 'browser_not_supported') {
+              // Will render the button instead
+              renderGoogleButton();
+              resolve();
+            } else {
+              reject(new Error('Google login failed. Please try again.'));
+            }
+          } else if (notification.isSkippedMoment()) {
+            console.error('Google login prompt skipped:', notification.getSkippedReason());
+            setIsLoading(false);
+            reject(new Error('Google login was skipped. Please try again.'));
+          } else if (notification.isDismissedMoment()) {
+            console.error('Google login prompt dismissed:', notification.getDismissedReason());
+            setIsLoading(false);
+            reject(new Error('Google login was dismissed. Please try again.'));
+          } else {
+            // This means the prompt is being shown to the user
+            // The result will come through the callback function above
+            setIsLoading(false);
+            resolve();
+          }
+        });
+      } catch (error) {
+        setIsLoading(false);
+        console.error('Google login failed:', error);
+        reject(error);
+      }
+    });
+  };
+
+  const renderGoogleButton = () => {
+    if (!window.google || !authInitialized) return;
+    
+    // Find or create a container for the button
+    let buttonContainer = document.getElementById('google-signin-button');
+    if (!buttonContainer) {
+      buttonContainer = document.createElement('div');
+      buttonContainer.id = 'google-signin-button';
+      document.body.appendChild(buttonContainer);
+    }
+    
+    // Clear any existing content
+    buttonContainer.innerHTML = '';
+    
+    try {
+      window.google.accounts.id.renderButton(buttonContainer, {
+        theme: 'outline',
+        size: 'large',
+        type: 'standard',
+        text: 'signin_with',
+        shape: 'rectangular',
+        logo_alignment: 'left',
       });
-      
-      return Promise.resolve();
     } catch (error) {
-      setIsLoading(false);
-      console.error('Google login failed:', error);
-      return Promise.reject(error);
+      console.error('Failed to render Google button:', error);
     }
   };
 
@@ -128,6 +239,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (window.google) {
       window.google.accounts.id.disableAutoSelect();
     }
+    toast({
+      title: "Signed Out",
+      description: "You have been signed out successfully.",
+    });
   };
 
   return (

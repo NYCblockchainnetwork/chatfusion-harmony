@@ -1,15 +1,17 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Login = () => {
   const { loginWithGoogle, isLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const googleButtonRef = useRef<HTMLDivElement>(null);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -18,16 +20,23 @@ const Login = () => {
     }
   }, [isAuthenticated, navigate]);
 
+  // Setup container for Google's custom button if needed
+  useEffect(() => {
+    const container = document.getElementById('google-signin-button');
+    if (container && googleButtonRef.current) {
+      googleButtonRef.current.appendChild(container);
+    }
+  }, []);
+
   const handleGoogleLogin = async () => {
     try {
       await loginWithGoogle();
-      // The actual login happens via the callback in AuthContext,
-      // so we don't need to add a success handler here
-    } catch (error) {
+      // The actual login happens via the callback in AuthContext
+    } catch (error: any) {
       console.error('Login error:', error);
       toast({
         title: "Login failed",
-        description: "Could not log in with Google. Please try again.",
+        description: error.message || "Could not log in with Google. Please try again.",
         variant: "destructive"
       });
     }
@@ -49,13 +58,12 @@ const Login = () => {
         <CardContent>
           <div className="space-y-4">
             {isGoogleConfigMissing && (
-              <div className="bg-amber-50 border border-amber-200 p-3 rounded-md flex items-start gap-2 text-amber-800 mb-4">
-                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="font-medium">Google Client ID not found</p>
-                  <p>The VITE_GOOGLE_CLIENT_ID environment variable is not set. Add it to your environment to enable Google login.</p>
-                </div>
-              </div>
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Google Client ID not found. Add VITE_GOOGLE_CLIENT_ID to your .env file to enable Google login.
+                </AlertDescription>
+              </Alert>
             )}
             
             <Button 
@@ -72,6 +80,9 @@ const Login = () => {
               </svg>
               {isLoading ? "Signing in..." : "Sign in with Google"}
             </Button>
+            
+            {/* Container for Google's custom button if needed */}
+            <div ref={googleButtonRef} className="mt-4 flex justify-center"></div>
           </div>
         </CardContent>
       </Card>
