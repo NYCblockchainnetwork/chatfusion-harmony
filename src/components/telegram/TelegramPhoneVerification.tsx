@@ -31,17 +31,36 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
   const [stage, setStage] = useState<'phone' | 'code'>('phone');
   const { user } = useAuth();
   
-  // Fetch Telegram API credentials from localStorage
-  const getApiCredentials = () => {
-    if (!user?.id) return { apiId: null, apiHash: null };
+  // Fetch Telegram API credentials from secure Edge Function
+  const fetchApiCredentials = async () => {
+    if (!user?.id) {
+      throw new Error("You must be logged in to use this feature");
+    }
     
-    const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
-    const apiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
-    
-    return {
-      apiId: apiId ? parseInt(apiId, 10) : null,
-      apiHash
-    };
+    try {
+      const { data, error } = await supabase.functions.invoke('get-telegram-credentials', {
+        body: {
+          userId: user.id
+        }
+      });
+      
+      if (error) throw new Error(error.message);
+      if (!data || !data.apiId || !data.apiHash) {
+        throw new Error("Could not retrieve Telegram API credentials");
+      }
+      
+      // Store temporarily in localStorage
+      localStorage.setItem(`telegram_api_id_${user.id}`, data.apiId);
+      localStorage.setItem(`telegram_api_hash_${user.id}`, data.apiHash);
+      
+      return {
+        apiId: parseInt(data.apiId, 10),
+        apiHash: data.apiHash
+      };
+    } catch (error) {
+      console.error("Error fetching API credentials:", error);
+      throw error;
+    }
   };
   
   const handleRequestCode = async () => {
@@ -67,15 +86,13 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
     setError(null);
     
     try {
-      // Get API credentials from localStorage
-      const { apiId, apiHash } = getApiCredentials();
+      // Get API credentials from Edge Function
+      const { apiId, apiHash } = await fetchApiCredentials();
       
-      if (!apiId || !apiHash) {
-        throw new Error("Telegram API credentials not found");
-      }
+      console.log("Sending code to phone:", phone);
       
       // Call the Edge Function to request verification code
-      const { data, error } = await supabase.functions.invoke('telegram-auth/send-code', {
+      const response = await supabase.functions.invoke('telegram-auth/send-code', {
         body: {
           phone,
           apiId,
@@ -84,9 +101,14 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
         }
       });
       
-      if (error) throw new Error(error.message);
+      if (response.error) {
+        throw new Error(response.error);
+      }
+      
+      const data = response.data;
+      
       if (!data || !data.success || !data.phoneCodeHash) {
-        throw new Error("Failed to send verification code");
+        throw new Error(data?.error?.details || data?.error || "Failed to send verification code");
       }
       
       // Store the phoneCodeHash for verification
@@ -134,44 +156,40 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
     setError(null);
     
     try {
-      // Get API credentials from localStorage
-      const { apiId, apiHash } = getApiCredentials();
+      // Get API credentials (they should be in localStorage from the previous step)
+      const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
+      const apiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
       
       if (!apiId || !apiHash) {
         throw new Error("Telegram API credentials not found");
       }
       
+      console.log("Verifying code for phone:", phone);
+      
       // Call the Edge Function to verify the code
-      const { data, error } = await supabase.functions.invoke('telegram-auth/verify-code', {
+      const response = await supabase.functions.invoke('telegram-auth/verify-code', {
         body: {
           phone,
           code: verificationCode,
           phoneCodeHash,
-          apiId,
+          apiId: parseInt(apiId, 10),
           apiHash,
           userId: user.id
         }
       });
       
-      if (error) throw new Error(error.message);
+      if (response.error) {
+        throw new Error(response.error);
+      }
+      
+      const data = response.data;
+      
       if (!data || !data.success) {
-        throw new Error("Failed to verify code");
+        throw new Error(data?.error?.details || data?.error || "Failed to verify code");
       }
       
-      // Query the database to get the session ID
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('telegram_sessions')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('phone', phone)
-        .single();
-      
-      if (sessionError || !sessionData) {
-        throw new Error("Failed to retrieve session details");
-      }
-      
-      // Call the onSuccess callback with the session ID
-      onSuccess(sessionData.id, phone);
+      // Call the onSuccess callback with the session ID and phone
+      onSuccess(data.sessionId, phone);
       
       toast({
         title: "Success",
