@@ -9,6 +9,7 @@ import VerificationCodeInput from "./VerificationCodeInput";
 import LoadingState from "./LoadingState";
 import ErrorState from "./ErrorState";
 import { useTelegramVerification } from "@/hooks/useTelegramVerification";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface TelegramPhoneVerificationProps {
   onSuccess: (sessionId: string, phone: string) => void;
@@ -19,6 +20,8 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
   onSuccess,
   onCancel
 }) => {
+  const { isAuthenticated } = useAuth();
+  
   const {
     phone,
     code,
@@ -32,6 +35,15 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
     verifyCode,
     goBackToPhone
   } = useTelegramVerification({ onSuccess });
+  
+  if (!isAuthenticated) {
+    return (
+      <ErrorState 
+        error="You must be logged in to use Telegram integration. Please log in and try again." 
+        onCancel={onCancel} 
+      />
+    );
+  }
   
   if (isLoading && !hasLoadedCredentials) {
     return <LoadingState />;

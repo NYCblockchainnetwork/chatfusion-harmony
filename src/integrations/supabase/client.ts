@@ -109,12 +109,16 @@ export const telegramClient = {
     console.log(`Getting Telegram API credentials for user ${userId}`);
     
     try {
-      // Get auth headers with valid token
+      // First, ensure we have a valid session
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) {
+        console.error("No active session found");
         throw new Error("No active session. Please login again.");
       }
       
+      console.log("Got session token, invoking edge function");
+      
+      // Call the edge function with the auth token
       const { data, error } = await supabase.functions.invoke('get-telegram-credentials', {
         body: { userId },
         headers: {
@@ -123,13 +127,16 @@ export const telegramClient = {
       });
       
       if (error) {
-        console.error("Error calling get-telegram-credentials:", error);
+        console.error("Error from edge function:", error);
         throw new Error(`Failed to get credentials: ${error.message}`);
       }
       
       if (!data || !data.apiId || !data.apiHash) {
+        console.error("Invalid response from edge function:", data);
         throw new Error("Invalid credentials response from server");
       }
+      
+      console.log("Successfully received credentials from edge function");
       
       return {
         apiId: data.apiId,

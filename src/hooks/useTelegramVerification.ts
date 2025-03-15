@@ -15,15 +15,15 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoadedCredentials, setHasLoadedCredentials] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   
   useEffect(() => {
+    if (!isAuthenticated || !user?.id) {
+      setError("You must be logged in to connect to Telegram");
+      return;
+    }
+    
     const loadCredentials = async () => {
-      if (!user?.id) {
-        setError("You must be logged in to connect to Telegram");
-        return;
-      }
-      
       try {
         setIsLoading(true);
         setError(null);
@@ -46,7 +46,8 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
         // Check for specific authentication errors
         if (error.message.includes("No active session") || 
             error.message.includes("Authentication error") ||
-            error.message.includes("Invalid authentication token")) {
+            error.message.includes("Invalid authentication token") ||
+            error.message.includes("auth")) {
           errorMessage = "Authentication failed. Please log in again and try once more.";
         }
         
@@ -62,7 +63,7 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
     };
     
     loadCredentials();
-  }, [user?.id]);
+  }, [user?.id, isAuthenticated]);
   
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
@@ -105,8 +106,13 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
 
   const sendVerificationCode = async () => {
     if (!validatePhone()) return;
-    if (!user?.id) {
+    if (!isAuthenticated || !user?.id) {
       setError("User authentication required");
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to use this feature",
+        variant: "destructive"
+      });
       return;
     }
     
@@ -154,7 +160,7 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
       setError("Session expired. Please request a new code.");
       return;
     }
-    if (!user?.id) {
+    if (!isAuthenticated || !user?.id) {
       setError("User authentication required");
       return;
     }
