@@ -39,15 +39,8 @@ enable_signup = true
 verify_jwt = true
 [functions.telegram-auth]
 verify_jwt = false
-[functions.telegram-auth-send-code]
-verify_jwt = true
-[functions.telegram-auth-verify-code]
-verify_jwt = true
-[functions.telegram-auth-qr-login-token]
-verify_jwt = true
-[functions.telegram-auth-check-qr-login]
-verify_jwt = true
 [functions.store-api-key]
 verify_jwt = true
 [functions.get-api-key]
 verify_jwt = true
+

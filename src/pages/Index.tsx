@@ -18,7 +18,7 @@ import { telegramClient } from '@/integrations/supabase/client';
 
 const Index = () => {
   const { user } = useAuth();
-  const { isConnected, error, getMessages } = useTelegram();
+  const { isConnected, error, refreshMessages } = useTelegram();
   const { settings, updateSettings } = useUserSettings();
   const [hasApiCredentials, setHasApiCredentials] = useState(false);
   const [authTab, setAuthTab] = useState<'qr' | 'phone'>('qr');
@@ -204,7 +204,7 @@ const Index = () => {
                 <CardDescription>Configure your Telegram API credentials before connecting</CardDescription>
               </CardHeader>
               <CardContent>
-                <Alert variant="warning" className="bg-amber-50 border-amber-200">
+                <Alert variant="destructive" className="bg-amber-50 border-amber-200">
                   <AlertCircle className="h-4 w-4 text-amber-800" />
                   <AlertTitle className="text-amber-800">Telegram API Credentials Required</AlertTitle>
                   <AlertDescription className="text-amber-700">
