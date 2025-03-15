@@ -94,11 +94,11 @@ serve(async (req) => {
             valid: true, 
             message: "Credentials valid and successfully connected to Telegram" 
           });
-        } catch (error) {
-          console.error("Error validating credentials:", error);
+        } catch (validationError) {
+          console.error("Error validating credentials:", validationError);
           return createResponse({
             valid: false,
-            error: error.message || "Invalid credentials"
+            error: validationError.message || "Invalid credentials"
           }, 400);
         }
 

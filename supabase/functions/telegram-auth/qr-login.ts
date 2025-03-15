@@ -1,263 +1,201 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import { TelegramClient } from "https://esm.sh/telegram@2.26.22";
 import { StringSession } from "https://esm.sh/telegram@2.26.22/sessions";
-import { Api } from "https://esm.sh/telegram@2.26.22";
+import { TelegramClient } from "https://esm.sh/telegram@2.26.22";
+import QRCode from "https://esm.sh/qrcode@1.5.3";
 
-// Generate a QR login token and URL
-export async function handleQrLogin(supabase: any, userId: string) {
+// Function to handle QR login initialization
+export async function handleQrLogin(supabase, userId) {
   try {
-    console.log("Handling QR login for user:", userId);
+    console.log("Starting QR login process for user:", userId);
     
-    // Get Telegram API credentials
-    const apiId = parseInt(Deno.env.get("telegram_api_id") || "0", 10);
-    const apiHash = Deno.env.get("telegram_api_hash") || "";
+    // Get API credentials from user_api_keys table
+    const { data: apiIdData, error: apiIdError } = await supabase
+      .from("user_api_keys")
+      .select("api_key")
+      .eq("user_id", userId)
+      .eq("service", "telegram_api_id")
+      .single();
     
-    if (!apiId || !apiHash) {
-      console.error("Telegram API credentials not configured");
-      throw new Error("Telegram API credentials not configured");
+    if (apiIdError) {
+      console.error("Error fetching API ID:", apiIdError);
+      return { error: "Failed to retrieve API ID" };
     }
     
-    console.log("Using API ID:", apiId);
+    const { data: apiHashData, error: apiHashError } = await supabase
+      .from("user_api_keys")
+      .select("api_key")
+      .eq("user_id", userId)
+      .eq("service", "telegram_api_hash")
+      .single();
     
-    // Create a Telegram client
+    if (apiHashError) {
+      console.error("Error fetching API Hash:", apiHashError);
+      return { error: "Failed to retrieve API Hash" };
+    }
+    
+    const apiId = apiIdData.api_key;
+    const apiHash = apiHashData.api_key;
+    
+    // Initialize Telegram client
+    console.log("Initializing Telegram client with API ID:", apiId);
     const stringSession = new StringSession("");
-    const client = new TelegramClient(stringSession, apiId, apiHash, {
+    const client = new TelegramClient(stringSession, parseInt(apiId, 10), apiHash, {
       connectionRetries: 3,
       useWSS: true,
     });
     
-    try {
-      // Connect to Telegram
-      console.log("Connecting to Telegram...");
-      await client.connect();
-      console.log("Connected to Telegram");
-      
-      // Export login token according to Telegram spec
-      console.log("Exporting login token...");
-      const loginToken = await client.invoke(
-        new Api.auth.ExportLoginToken({
-          apiId: apiId,
-          apiHash: apiHash,
-          exceptIds: []
-        })
-      );
-      
-      // Get token from result
-      if (!loginToken.token) {
-        throw new Error("Failed to get login token from Telegram");
+    await client.connect();
+    console.log("Connected to Telegram");
+    
+    // Generate QR login data
+    const { token, expires } = await client.qrLogin({ 
+      qrCode: true,
+      onError: (errorMessage) => {
+        console.error("QR login error:", errorMessage);
+        return { error: errorMessage };
       }
-      
-      // Base64url encode the token as per Telegram specs
-      const tokenBase64 = btoa(String.fromCharCode(...new Uint8Array(loginToken.token)))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-      
-      // Prepare QR URL in proper format: tg://login?token=<base64url-token>
-      const qrUrl = `tg://login?token=${tokenBase64}`;
-      
-      console.log("Generated QR URL:", qrUrl);
-      
-      // Store the token in the database with status pending
-      const { error } = await supabase
-        .from("qr_login_states")
-        .insert({
-          user_id: userId,
-          token: tokenBase64, // Store the base64url token
-          status: "pending",
-          expires_at: new Date(Date.now() + loginToken.expires * 1000).toISOString(),
-        });
-      
-      if (error) {
-        console.error("Error storing QR token:", error);
-        throw new Error("Failed to store QR login token");
-      }
-      
-      // Disconnect from Telegram
-      await client.disconnect();
-      
-      return {
-        token: tokenBase64,
-        qrUrl,
-        expiresAt: new Date(Date.now() + loginToken.expires * 1000).toISOString(),
-      };
-    } catch (error) {
-      // For development fallback if Telegram API is not working
-      console.warn("Error using Telegram API, falling back to mock implementation:", error);
-      
-      // Generate a random token according to Telegram specs
-      const randomBytes = new Uint8Array(32);
-      crypto.getRandomValues(randomBytes);
-      const tokenBytes = Array.from(randomBytes);
-      
-      // Base64url encode the token
-      const tokenBase64 = btoa(String.fromCharCode(...tokenBytes))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-      
-      // Prepare QR URL in proper format
-      const qrUrl = `tg://login?token=${tokenBase64}`;
-      
-      console.log("Generated mock QR URL:", qrUrl);
-      
-      // Store the token in the database with status pending
-      const { error } = await supabase
-        .from("qr_login_states")
-        .insert({
-          user_id: userId,
-          token: tokenBase64,
-          status: "pending",
-          expires_at: new Date(Date.now() + 30 * 1000).toISOString(), // 30 seconds expiry
-        });
-      
-      if (error) {
-        console.error("Error storing QR token:", error);
-        throw new Error("Failed to store QR login token");
-      }
-      
-      return {
-        token: tokenBase64,
-        qrUrl,
-        expiresAt: new Date(Date.now() + 30 * 1000).toISOString(),
-      };
+    });
+    
+    // Generate QR code URL
+    const qrUrl = await QRCode.toDataURL(token.url);
+    console.log("Generated QR code URL");
+    
+    // Store token, session, and expiry in database
+    const expiresAt = new Date(Date.now() + expires * 1000).toISOString();
+    const { error: insertError } = await supabase
+      .from("qr_login_states")
+      .insert({
+        user_id: userId,
+        token: token.token,
+        expires_at: expiresAt,
+        session_string: stringSession.save()
+      });
+    
+    if (insertError) {
+      console.error("Error storing QR login state:", insertError);
+      return { error: "Failed to store QR login state" };
     }
-  } catch (error) {
-    console.error("Error in handleQrLogin:", error);
-    throw error;
+    
+    return {
+      token: token.token,
+      qrUrl,
+      expiresAt
+    };
+  } catch (err) {
+    console.error("Error in QR login process:", err);
+    return { error: err.message || "Failed to initiate QR login" };
   }
 }
 
-// Process a QR code login
-export async function processQrCodeLogin(supabase: any, userId: string, token: string) {
+// Function to process QR code login
+export async function processQrCodeLogin(supabase, userId, token) {
   try {
-    console.log("Processing QR code login for token:", token);
+    console.log("Processing QR code login for user:", userId, "token:", token);
     
-    // Check if the token exists and is valid
-    const { data: tokenData, error: tokenError } = await supabase
+    // Get QR login state from database
+    const { data: loginState, error: fetchError } = await supabase
       .from("qr_login_states")
       .select("*")
-      .eq("token", token)
       .eq("user_id", userId)
-      .eq("status", "pending")
-      .gt("expires_at", new Date().toISOString())
+      .eq("token", token)
       .single();
     
-    if (tokenError || !tokenData) {
-      console.log("Token not found or expired:", tokenError);
+    if (fetchError) {
+      console.error("Error fetching QR login state:", fetchError);
+      return { success: false, error: "Failed to fetch login state" };
+    }
+    
+    // Check if token is expired
+    const now = new Date();
+    const expiresAt = new Date(loginState.expires_at);
+    
+    if (now > expiresAt) {
+      console.log("Token expired at:", expiresAt);
       return { success: false, expired: true };
     }
     
-    // Get Telegram API credentials
-    const apiId = parseInt(Deno.env.get("telegram_api_id") || "0", 10);
-    const apiHash = Deno.env.get("telegram_api_hash") || "";
+    // Get API credentials
+    const { data: apiIdData, error: apiIdFetchError } = await supabase
+      .from("user_api_keys")
+      .select("api_key")
+      .eq("user_id", userId)
+      .eq("service", "telegram_api_id")
+      .single();
     
-    if (!apiId || !apiHash) {
-      console.error("Telegram API credentials not configured");
-      throw new Error("Telegram API credentials not configured");
+    if (apiIdFetchError) {
+      console.error("Error fetching API ID:", apiIdFetchError);
+      return { success: false, error: "Failed to retrieve API ID" };
     }
     
-    try {
-      // Create a Telegram client
-      const stringSession = new StringSession("");
-      const client = new TelegramClient(stringSession, apiId, apiHash, {
-        connectionRetries: 3,
-        useWSS: true,
-      });
+    const { data: apiHashData, error: apiHashFetchError } = await supabase
+      .from("user_api_keys")
+      .select("api_key")
+      .eq("user_id", userId)
+      .eq("service", "telegram_api_hash")
+      .single();
+    
+    if (apiHashFetchError) {
+      console.error("Error fetching API Hash:", apiHashFetchError);
+      return { success: false, error: "Failed to retrieve API Hash" };
+    }
+    
+    const apiId = apiIdData.api_key;
+    const apiHash = apiHashData.api_key;
+    
+    // Create client with saved session
+    const stringSession = new StringSession(loginState.session_string);
+    const client = new TelegramClient(stringSession, parseInt(apiId, 10), apiHash, {
+      connectionRetries: 3,
+      useWSS: true,
+    });
+    
+    await client.connect();
+    console.log("Connected to Telegram with saved session");
+    
+    // Check authorization status
+    if (await client.isUserAuthorized()) {
+      console.log("User is authorized");
       
-      // Connect to Telegram
-      console.log("Connecting to Telegram...");
-      await client.connect();
-      console.log("Connected to Telegram");
+      // Get user information
+      const me = await client.getMe();
+      console.log("Got user info:", me);
       
-      // Import login token according to Telegram spec
-      console.log("Importing login token...");
+      const phoneNumber = me.phone ? me.phone : null;
       
-      // In real implementation, when updateLoginToken is received,
-      // we would call auth.importLoginToken here
-      // For now, we'll simulate a successful import with a 3-second delay
-      
-      // Mark the token as used
-      const sessionId = crypto.randomUUID();
-      await supabase
-        .from("qr_login_states")
-        .update({ 
-          status: "used",
-          session_id: sessionId
-        })
-        .eq("token", token);
-      
-      // Store the session in the database
-      const { error: sessionError } = await supabase
+      // Create a session record
+      const { data: session, error: sessionError } = await supabase
         .from("telegram_sessions")
         .insert({
-          id: sessionId,
           user_id: userId,
-          phone: "QR Login", // Mark that this session was created via QR
           session_string: stringSession.save(),
-        });
+          phone: phoneNumber,
+          is_active: true
+        })
+        .select()
+        .single();
       
       if (sessionError) {
-        console.error("Error storing session:", sessionError);
-        throw new Error("Failed to store Telegram session");
+        console.error("Error creating session record:", sessionError);
+        return { success: false, error: "Failed to create session record" };
       }
       
-      // Disconnect from Telegram
-      await client.disconnect();
+      // Clean up QR login state
+      await supabase
+        .from("qr_login_states")
+        .delete()
+        .eq("id", loginState.id);
       
-      console.log("Successfully authenticated via QR code, created session:", sessionId);
-      
-      return { success: true, sessionId };
-    } catch (error) {
-      console.warn("Error using Telegram API, falling back to mock implementation:", error);
-      
-      // For simulation, we'll check if the token is about to expire and
-      // simulate a successful login with 80% probability after some delay
-      const tokenAge = new Date().getTime() - new Date(tokenData.created_at).getTime();
-      const shouldSucceed = Math.random() > 0.2; // 80% chance of success
-      
-      if (shouldSucceed && tokenAge > 3000) { // Wait at least 3 seconds before success
-        // Create a session ID
-        const sessionId = crypto.randomUUID();
-        
-        // Mark the token as used
-        await supabase
-          .from("qr_login_states")
-          .update({ 
-            status: "used",
-            session_id: sessionId
-          })
-          .eq("token", token);
-        
-        // Create a mock session
-        const stringSession = new StringSession("");
-        
-        // Store the session in the database
-        const { error: sessionError } = await supabase
-          .from("telegram_sessions")
-          .insert({
-            id: sessionId,
-            user_id: userId,
-            phone: "QR Login", // Mark that this session was created via QR
-            session_string: stringSession.save(),
-          });
-        
-        if (sessionError) {
-          console.error("Error storing session:", sessionError);
-          throw new Error("Failed to store Telegram session");
-        }
-        
-        console.log("Successfully authenticated via QR code (mock), created session:", sessionId);
-        
-        return { success: true, sessionId };
-      }
-      
-      // If not successful yet, just return that it's pending
+      return { 
+        success: true, 
+        sessionId: session.id,
+        phone: phoneNumber
+      };
+    } else {
+      console.log("User is not authorized yet");
       return { success: false, expired: false };
     }
-  } catch (error) {
-    console.error("Error in processQrCodeLogin:", error);
-    throw error;
+  } catch (err) {
+    console.error("Error processing QR login:", err);
+    return { success: false, error: err.message || "Error processing QR login" };
   }
 }
