@@ -5,7 +5,7 @@ import { telegramClient } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
 interface UseTelegramVerificationProps {
-  onSuccess: (sessionId: string, phone: string) => void;
+  onSuccess: (sessionId: string, phone?: string) => void;
 }
 
 export function useTelegramVerification({ onSuccess }: UseTelegramVerificationProps) {
