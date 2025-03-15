@@ -22,6 +22,7 @@ const TelegramAuthSection = () => {
     defaultValues: {
       apiId: '',
       apiHash: '',
+      useEnvSecrets: false
     },
   });
 
@@ -39,10 +40,20 @@ const TelegramAuthSection = () => {
         // Check if user has already connected to Telegram
         if (settings?.telegramIntegrationEnabled) {
           setConnectionStatus('connected');
+          
+          // Try to get saved API credentials - we still need to populate the form
+          // in case the user wants to update them
+          const apiId = await getApiKey('telegram_api_id');
+          const apiHash = await getApiKey('telegram_api_hash');
+          
+          // Simplify this logic: if we get back non-null values, use them
+          if (apiId) form.setValue('apiId', apiId);
+          if (apiHash) form.setValue('apiHash', apiHash);
+          
           return;
         }
         
-        // Try to get saved API credentials
+        // Not yet connected, check if we have pre-saved credentials
         const apiId = await getApiKey('telegram_api_id');
         const apiHash = await getApiKey('telegram_api_hash');
         
@@ -52,13 +63,9 @@ const TelegramAuthSection = () => {
         });
         
         // If we have credentials, pre-fill the form
-        if (apiId) {
-          form.setValue('apiId', apiId);
-        }
+        if (apiId) form.setValue('apiId', apiId);
+        if (apiHash) form.setValue('apiHash', apiHash);
         
-        if (apiHash) {
-          form.setValue('apiHash', apiHash);
-        }
       } catch (error) {
         console.error('Error loading Telegram credentials:', error);
         setErrorMessage("Failed to load saved credentials");
@@ -71,9 +78,14 @@ const TelegramAuthSection = () => {
   }, [settings, getApiKey, form, user]);
   
   const handleConnect = async (formData) => {
-    const { apiId, apiHash } = formData;
+    const { apiId, apiHash, useEnvSecrets } = formData;
     
-    if (!apiId || !apiHash) {
+    // Check if we're using environment secrets or user-provided values
+    const useSecrets = useEnvSecrets || 
+                      apiId === import.meta.env.VITE_TELEGRAM_API_ID || 
+                      apiHash === import.meta.env.VITE_TELEGRAM_API_HASH;
+    
+    if ((!apiId || !apiHash) && !useSecrets) {
       toast({
         title: "Error",
         description: "API ID and API Hash are required",
@@ -97,21 +109,14 @@ const TelegramAuthSection = () => {
     try {
       console.log("Saving Telegram credentials for user:", user.id);
       
-      // When using the pre-configured API credentials from .env, 
-      // pass the exact environment variable name to trigger the Edge Function
-      // to use the stored secret value
-      
-      // If user enters the actual placeholders as defined in .env file,
-      // we'll use the secret values from Supabase
-      const useApiIdSecret = apiId === import.meta.env.VITE_TELEGRAM_API_ID;
-      const useApiHashSecret = apiHash === import.meta.env.VITE_TELEGRAM_API_HASH;
+      // Use our new simplified approach
+      // If using environment secrets, send a special value that the Edge Function recognizes
+      const finalApiId = useSecrets ? 'USE_ENV_SECRET' : apiId;
+      const finalApiHash = useSecrets ? 'USE_ENV_SECRET' : apiHash;
       
       // Save API ID first
       console.log("Saving API ID...");
-      const apiIdSaved = await saveApiKey(
-        'telegram_api_id', 
-        useApiIdSecret ? 'telegram_api_id' : apiId
-      );
+      const apiIdSaved = await saveApiKey('telegram_api_id', finalApiId);
       
       if (!apiIdSaved) {
         throw new Error("Failed to save API ID");
@@ -119,10 +124,7 @@ const TelegramAuthSection = () => {
       
       // Then save API Hash
       console.log("Saving API Hash...");
-      const apiHashSaved = await saveApiKey(
-        'telegram_api_hash', 
-        useApiHashSecret ? 'telegram_api_hash' : apiHash
-      );
+      const apiHashSaved = await saveApiKey('telegram_api_hash', finalApiHash);
       
       if (!apiHashSaved) {
         throw new Error("Failed to save API Hash");
@@ -225,6 +227,26 @@ const TelegramAuthSection = () => {
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleConnect)} className="space-y-4">
+              <div className="bg-amber-50 p-3 rounded-md border border-amber-200 mb-4">
+                <p className="text-amber-700 font-medium">Use Preconfigured Credentials</p>
+                <p className="text-sm text-amber-600 mb-2">
+                  This app has preconfigured Telegram API credentials you can use.
+                </p>
+                <Button 
+                  type="button"
+                  variant="outline"
+                  className="bg-white text-amber-700 border-amber-300 hover:bg-amber-100"
+                  onClick={() => {
+                    form.setValue('useEnvSecrets', true);
+                    form.handleSubmit(handleConnect)();
+                  }}
+                >
+                  Use Preconfigured Credentials
+                </Button>
+              </div>
+              
+              <p className="text-sm text-gray-500 mb-2">Or enter your own credentials:</p>
+              
               <FormField
                 control={form.control}
                 name="apiId"

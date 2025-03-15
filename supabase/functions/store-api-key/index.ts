@@ -27,8 +27,7 @@ serve(async (req) => {
     const { userId, service, apiKey } = requestData;
     
     console.log(`Processing request for user ${userId} and service ${service}`);
-    console.log(`API key value type: ${typeof apiKey}, length: ${apiKey?.length || 0}`);
-
+    
     // Validate inputs
     if (!userId) {
       console.error("Missing userId in request");
@@ -71,34 +70,36 @@ serve(async (req) => {
       return createErrorResponse("You can only manage your own API keys", 403);
     }
 
-    // Check for special case: Using environment secret values for Telegram
     let finalApiKey = apiKey;
     
-    // If the service is telegram_api_id or telegram_api_hash AND
-    // the value is exactly 'telegram_api_id' or 'telegram_api_hash', get value from env
-    if (service === 'telegram_api_id' && apiKey === 'telegram_api_id') {
-      const secretValue = Deno.env.get('telegram_api_id');
-      if (secretValue) {
-        console.log("Using Telegram API ID from Supabase secrets");
-        finalApiKey = secretValue;
+    // IMPORTANT: Simple approach - For Telegram credentials specifically,
+    // directly access the environment variables if that's what we want
+    if (service === 'telegram_api_id' && apiKey === 'USE_ENV_SECRET') {
+      // Try to get from environment
+      const secretApiId = Deno.env.get('telegram_api_id');
+      if (secretApiId) {
+        console.log("Using telegram_api_id from env secrets");
+        finalApiKey = secretApiId;
       } else {
-        console.error("telegram_api_id secret not found in environment");
-        return createErrorResponse("Error: Required secret telegram_api_id not found in Supabase");
+        console.error("telegram_api_id not found in env secrets");
+        return createErrorResponse("Required secret telegram_api_id not found in Supabase");
       }
-    } else if (service === 'telegram_api_hash' && apiKey === 'telegram_api_hash') {
-      const secretValue = Deno.env.get('telegram_api_hash');
-      if (secretValue) {
-        console.log("Using Telegram API Hash from Supabase secrets");
-        finalApiKey = secretValue;
+    } 
+    else if (service === 'telegram_api_hash' && apiKey === 'USE_ENV_SECRET') {
+      // Try to get from environment
+      const secretApiHash = Deno.env.get('telegram_api_hash');
+      if (secretApiHash) {
+        console.log("Using telegram_api_hash from env secrets");
+        finalApiKey = secretApiHash;
       } else {
-        console.error("telegram_api_hash secret not found in environment");
-        return createErrorResponse("Error: Required secret telegram_api_hash not found in Supabase");
+        console.error("telegram_api_hash not found in env secrets");
+        return createErrorResponse("Required secret telegram_api_hash not found in Supabase");
       }
     }
-    
-    // Delete the API key if empty
+
+    // Handle deletion (empty value)
     if (!finalApiKey || finalApiKey.trim() === "") {
-      console.log("Deleting API key due to empty value");
+      console.log(`Deleting ${service} API key`);
       const { error: deleteError } = await supabaseClient
         .from("user_api_keys")
         .delete()
@@ -121,7 +122,7 @@ serve(async (req) => {
       .upsert(
         {
           user_id: userId,
-          service,
+          service: service,
           api_key: finalApiKey,
           updated_at: new Date().toISOString(),
         },
