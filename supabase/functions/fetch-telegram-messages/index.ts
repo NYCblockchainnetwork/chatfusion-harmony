@@ -26,9 +26,12 @@ interface TelegramMessage {
 
 // Function to create mock messages for a handle
 function createMockMessage(handle: string, index: number = 0): TelegramMessage {
+  const topics = ["sports", "news", "technology", "entertainment", "business"];
+  const topic = topics[Math.floor(Math.random() * topics.length)];
+  
   return {
     id: index + 1,
-    text: `This is a mock message ${index + 1} for @${handle}. The Telegram API integration is using mock data.`,
+    text: `This is a mock message ${index + 1} about ${topic} for @${handle}. Telegram API integration is using mock data.`,
     date: Math.floor(Date.now() / 1000) - (index * 3600), // Messages spaced 1 hour apart
     from: {
       username: handle,
@@ -91,17 +94,24 @@ serve(async (req) => {
     // Create object to store messages for each handle
     const result: Record<string, TelegramMessage[]> = {};
     
-    // Always use mock messages since real Telegram client doesn't work in Deno
-    console.log("Using mock messages due to Telegram client incompatibility with Deno");
-    
-    // Generate mock messages for each handle
-    for (const handle of handles) {
-      const cleanHandle = handle.startsWith('@') ? handle.substring(1) : handle;
-      result[cleanHandle] = generateMockMessages(cleanHandle, Math.min(limit, 5));
-      console.log(`Generated ${result[cleanHandle].length} mock messages for @${cleanHandle}`);
+    // Try to import a Deno-compatible Telegram client
+    try {
+      // This is a placeholder for a future Deno-compatible Telegram client
+      // For now, we'll use mock data since there's no reliable Deno-compatible
+      // Telegram MTProto client available at this time
+      throw new Error("No Deno-compatible Telegram client available");
+    } catch (importError) {
+      console.warn("Using mock messages due to Telegram client incompatibility:", importError.message);
+      
+      // Generate mock messages for each handle
+      for (const handle of handles) {
+        const cleanHandle = handle.startsWith('@') ? handle.substring(1) : handle;
+        result[cleanHandle] = generateMockMessages(cleanHandle, Math.min(limit, 5));
+        console.log(`Generated ${result[cleanHandle].length} mock messages for @${cleanHandle}`);
+      }
     }
     
-    console.log("Completed generating mock messages for all handles:", Object.keys(result));
+    console.log("Completed processing request for all handles:", Object.keys(result));
     
     // Return the results with the session string unchanged
     return new Response(
