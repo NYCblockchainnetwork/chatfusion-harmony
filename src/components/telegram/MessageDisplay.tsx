@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { MessageCircle, User, AlertCircle } from "lucide-react";
+import { MessageCircle, User, AlertCircle, Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,9 +8,10 @@ import { TelegramMessage } from '@/utils/telegramMessages';
 
 interface MessageDisplayProps {
   messages: Record<string, TelegramMessage[]>;
+  isMockMode?: boolean;
 }
 
-const MessageDisplay: React.FC<MessageDisplayProps> = ({ messages }) => {
+const MessageDisplay: React.FC<MessageDisplayProps> = ({ messages, isMockMode = false }) => {
   if (!messages || Object.keys(messages).length === 0) {
     return (
       <Card className="mt-6">
@@ -38,6 +39,15 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ messages }) => {
   return (
     <div className="space-y-4 mt-6">
       <h3 className="text-lg font-medium">Recent Messages</h3>
+      
+      {isMockMode && (
+        <Alert variant="warning" className="bg-amber-50 border-amber-100 text-amber-800 mb-3">
+          <Info className="h-4 w-4 text-amber-500" />
+          <AlertDescription>
+            These are mock messages. Real-time Telegram API integration is unavailable in this environment.
+          </AlertDescription>
+        </Alert>
+      )}
       
       {Object.entries(messages).map(([handle, handleMessages]) => (
         <div key={handle} className="border rounded-lg p-4">

@@ -13,6 +13,7 @@ const TelegramMessageViewer = () => {
   const [handles, setHandles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Record<string, any>>({});
+  const [isMockMode, setIsMockMode] = useState(false);
   const { user } = useAuth();
   const { settings, updateSettings } = useUserSettings();
   
@@ -91,7 +92,7 @@ const TelegramMessageViewer = () => {
         return;
       }
       
-      console.log("Fetching Telegram messages via Edge Function using MTProto API");
+      console.log("Fetching Telegram messages via Edge Function");
       
       // Get stored API credentials from localStorage
       const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
@@ -125,6 +126,14 @@ const TelegramMessageViewer = () => {
       
       console.log("Successfully fetched messages via Edge Function");
       
+      // Check if we're in mock mode
+      if (data.mode === "mock") {
+        setIsMockMode(true);
+        console.log("Using mock Telegram data");
+      } else {
+        setIsMockMode(false);
+      }
+      
       // Save the new session string if provided
       if (data.sessionString && user.id) {
         localStorage.setItem(`telegram_session_${user.id}`, data.sessionString);
@@ -134,7 +143,9 @@ const TelegramMessageViewer = () => {
       
       toast({
         title: "Messages Fetched",
-        description: `Retrieved live messages from ${Object.keys(data.messages).length} handles`,
+        description: isMockMode 
+          ? `Retrieved mock messages from ${Object.keys(data.messages).length} handles` 
+          : `Retrieved live messages from ${Object.keys(data.messages).length} handles`,
       });
     } catch (error) {
       console.error("Error fetching messages:", error);
@@ -151,9 +162,25 @@ const TelegramMessageViewer = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Telegram Messages</CardTitle>
+        <CardTitle>
+          Telegram Messages
+          {isMockMode && (
+            <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
+              Mock Data
+            </span>
+          )}
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {isMockMode && (
+          <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
+            <p className="text-sm text-amber-800">
+              Using mock Telegram data. The Telegram API client is not compatible with this environment.
+              Mock messages are being displayed instead.
+            </p>
+          </div>
+        )}
+        
         <HandleInput onAddHandle={handleAddHandle} />
         
         <HandleList 
@@ -163,7 +190,7 @@ const TelegramMessageViewer = () => {
           isLoading={isLoading}
         />
         
-        <MessageDisplay messages={messages} />
+        <MessageDisplay messages={messages} isMockMode={isMockMode} />
       </CardContent>
     </Card>
   );
