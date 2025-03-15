@@ -23,6 +23,29 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// Helper function to create a response with CORS headers
+function createResponse(body: any, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// Helper function to create an error response
+function createErrorResponse(message: string, status = 500) {
+  console.error(`Error: ${message}`);
+  return createResponse({ error: message }, status);
+}
+
+// Helper function to validate input parameters
+function validateInput(data: any, requiredFields: string[]) {
+  const missingFields = requiredFields.filter(field => !data[field]);
+  if (missingFields.length > 0) {
+    return `Missing required fields: ${missingFields.join(', ')}`;
+  }
+  return null;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -43,35 +66,29 @@ serve(async (req) => {
       console.log("Request data:", JSON.stringify(data));
     } catch (error) {
       console.error("Error parsing request body:", error);
-      return new Response(
-        JSON.stringify({ error: "Invalid request body", details: error.message }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return createErrorResponse("Invalid request body: " + error.message, 400);
     }
     
-    // Check for API credentials
-    const apiId = data.apiId || Number(Deno.env.get("telegram_api_id"));
-    const apiHash = data.apiHash || Deno.env.get("telegram_api_hash");
+    // Validate user ID
     const userId = data.userId;
+    if (!userId) {
+      return createErrorResponse("User ID is required", 400);
+    }
+
+    // Get API credentials - either from request or from environment
+    const defaultApiId = Deno.env.get("telegram_api_id");
+    const defaultApiHash = Deno.env.get("telegram_api_hash");
     
-    console.log(`Using apiId: ${apiId}, apiHash: ${!!apiHash ? 'provided' : 'missing'}, userId: ${userId}`);
+    const apiId = data.apiId || (defaultApiId ? Number(defaultApiId) : undefined);
+    const apiHash = data.apiHash || defaultApiHash;
+    
+    console.log(`Using apiId: ${apiId ? 'provided' : 'missing'}, apiHash: ${apiHash ? 'provided' : 'missing'}, userId: ${userId}`);
 
     if (!apiId || !apiHash) {
-      console.error("Missing Telegram API credentials");
-      return new Response(
-        JSON.stringify({ 
-          error: "Telegram API credentials not found",
-          details: `apiId ${!apiId ? 'missing' : 'provided'}, apiHash ${!apiHash ? 'missing' : 'provided'}`
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!userId) {
-      console.error("Missing userId in request");
-      return new Response(
-        JSON.stringify({ error: "User ID is required" }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      return createErrorResponse(
+        "Telegram API credentials not found. " +
+        `apiId ${!apiId ? 'missing' : 'provided'}, apiHash ${!apiHash ? 'missing' : 'provided'}`,
+        400
       );
     }
 
@@ -82,29 +99,20 @@ serve(async (req) => {
       console.log("Successfully imported grm library");
     } catch (error) {
       console.error("Error importing grm library:", error);
-      return new Response(
-        JSON.stringify({ 
-          error: `Failed to import Telegram library: ${error.message}`,
-          details: error.stack || "No stack trace available"
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return createErrorResponse(`Failed to import Telegram library: ${error.message}`, 500);
     }
     
     const { StringSession, TelegramClient } = grmModule;
     
     // If the action is "send-code", send a verification code
     if (action === "send-code") {
-      const { phone } = data as PhoneAuthRequest;
-      
-      if (!phone) {
-        console.error("Missing phone number in request");
-        return new Response(
-          JSON.stringify({ error: "Phone number is required" }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      // Validate required fields
+      const validationError = validateInput(data, ['phone']);
+      if (validationError) {
+        return createErrorResponse(validationError, 400);
       }
       
+      const { phone } = data as PhoneAuthRequest;
       console.log(`Sending verification code to phone: ${phone}`);
       
       // Create a new Telegram client
@@ -133,14 +141,11 @@ serve(async (req) => {
         await client.disconnect();
         console.log("Disconnected from Telegram API");
         
-        return new Response(
-          JSON.stringify({ 
-            success: true,
-            phoneCodeHash: result.phoneCodeHash,
-            message: "Verification code sent successfully"
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return createResponse({ 
+          success: true,
+          phoneCodeHash: result.phoneCodeHash,
+          message: "Verification code sent successfully"
+        });
       } catch (error) {
         console.error("Error sending verification code:", error);
         
@@ -154,35 +159,19 @@ serve(async (req) => {
           console.error("Error disconnecting client:", disconnectError);
         }
         
-        return new Response(
-          JSON.stringify({ 
-            error: `Failed to send verification code: ${error.message}`,
-            details: error.stack || "No stack trace available"
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return createErrorResponse(`Failed to send verification code: ${error.message}`, 500);
       }
     }
     
     // If the action is "verify-code", verify the code and get a session
     else if (action === "verify-code") {
-      const { phone, code, phoneCodeHash } = data as CodeVerifyRequest;
-      
-      if (!phone || !code || !phoneCodeHash) {
-        console.error("Missing required parameters in verify-code request");
-        return new Response(
-          JSON.stringify({ 
-            error: "Phone number, code, and phoneCodeHash are required",
-            missing: { 
-              phone: !phone, 
-              code: !code, 
-              phoneCodeHash: !phoneCodeHash 
-            }
-          }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      // Validate required fields
+      const validationError = validateInput(data, ['phone', 'code', 'phoneCodeHash']);
+      if (validationError) {
+        return createErrorResponse(validationError, 400);
       }
       
+      const { phone, code, phoneCodeHash } = data as CodeVerifyRequest;
       console.log(`Verifying code for phone: ${phone}, userId: ${userId}`);
       
       // Create a new Telegram client
@@ -206,11 +195,11 @@ serve(async (req) => {
         console.log("Code verified successfully");
         
         // Get the session string
-        const sessionString = stringSession.save();
+        const sessionString = client.session.save();
         console.log("Session string saved, length:", sessionString.length);
         
-        // Store the session in the database - check if a session already exists
-        console.log(`Storing session for user: ${userId}, phone: ${phone}`);
+        // Check if a session already exists for this phone number and user
+        console.log(`Checking for existing session for user: ${userId}, phone: ${phone}`);
         
         const { data: existingSession, error: checkError } = await supabase
           .from('telegram_sessions')
@@ -221,6 +210,7 @@ serve(async (req) => {
         
         if (checkError) {
           console.error("Error checking for existing session:", checkError);
+          return createErrorResponse(`Failed to check for existing session: ${checkError.message}`, 500);
         }
         
         let sessionId;
@@ -239,7 +229,7 @@ serve(async (req) => {
           
           if (updateError) {
             console.error("Error updating session:", updateError);
-            throw new Error(`Failed to update session: ${updateError.message}`);
+            return createErrorResponse(`Failed to update session: ${updateError.message}`, 500);
           }
           
           sessionId = existingSession.id;
@@ -261,7 +251,7 @@ serve(async (req) => {
           
           if (insertError) {
             console.error("Error creating new session:", insertError);
-            throw new Error(`Failed to create session: ${insertError.message}`);
+            return createErrorResponse(`Failed to create session: ${insertError.message}`, 500);
           }
           
           sessionId = newSession.id;
@@ -272,15 +262,12 @@ serve(async (req) => {
         await client.disconnect();
         console.log("Disconnected from Telegram API");
         
-        return new Response(
-          JSON.stringify({ 
-            success: true,
-            sessionId,
-            phone,
-            message: "Telegram authentication successful"
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return createResponse({ 
+          success: true,
+          sessionId,
+          phone,
+          message: "Telegram authentication successful"
+        });
       } catch (error) {
         console.error("Error verifying code:", error);
         
@@ -309,31 +296,16 @@ serve(async (req) => {
           errorStatus = 400;
         }
         
-        return new Response(
-          JSON.stringify({ 
-            error: errorMessage,
-            details: error.stack || "No stack trace available"
-          }),
-          { status: errorStatus, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return createErrorResponse(errorMessage, errorStatus);
       }
     }
     
     // If no valid action is specified
     console.error("Invalid action specified:", action);
-    return new Response(
-      JSON.stringify({ error: "Invalid action. Use send-code or verify-code" }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return createErrorResponse("Invalid action. Use send-code or verify-code", 400);
     
   } catch (error) {
     console.error("Unhandled error in telegram-auth function:", error);
-    return new Response(
-      JSON.stringify({ 
-        error: error.message || "An unknown error occurred",
-        details: error.stack || "No stack trace available"
-      }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return createErrorResponse(error.message || "An unknown error occurred");
   }
 });

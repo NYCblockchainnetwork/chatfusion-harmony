@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Phone, Key, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, telegramClient } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, AlertTriangle } from "lucide-react";
@@ -128,41 +128,20 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
       setIsLoading(true);
       setError(null);
       
-      // Get API credentials from localStorage
-      const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
-      const apiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
-      
-      if (!apiId || !apiHash) {
-        setError("Telegram API credentials not found");
-        return;
-      }
-
       console.log(`Sending verification code to ${phone} for user ${user.id}`);
       
-      // Call the edge function to send the verification code
-      const { data, error } = await supabase.functions.invoke('telegram-auth/send-code', {
-        body: {
-          phone,
-          apiId: Number(apiId),
-          apiHash,
-          userId: user.id
-        }
-      });
+      // Use the telegramClient to send the verification code
+      const result = await telegramClient.sendCode(phone, user.id);
       
-      console.log("Response from send-code:", data, error);
+      console.log("Response from send-code:", result);
       
-      if (error) {
-        console.error("Error from edge function:", error);
-        throw new Error(`Failed to send verification code: ${error}`);
-      }
-      
-      if (!data || !data.success || !data.phoneCodeHash) {
-        console.error("Invalid response from edge function:", data);
+      if (!result || !result.success || !result.phoneCodeHash) {
+        console.error("Invalid response from edge function:", result);
         throw new Error("Failed to get verification code hash");
       }
       
       // Store the phoneCodeHash
-      setPhoneCodeHash(data.phoneCodeHash);
+      setPhoneCodeHash(result.phoneCodeHash);
       
       // Move to the code verification step
       setStep("code");
@@ -201,43 +180,20 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
       setIsLoading(true);
       setError(null);
       
-      // Get API credentials from localStorage
-      const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
-      const apiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
-      
-      if (!apiId || !apiHash) {
-        setError("Telegram API credentials not found");
-        return;
-      }
-      
       console.log(`Verifying code for ${phone}, user ${user.id}`);
       
-      // Call the edge function to verify the code
-      const { data, error } = await supabase.functions.invoke('telegram-auth/verify-code', {
-        body: {
-          phone,
-          code,
-          phoneCodeHash,
-          apiId: Number(apiId),
-          apiHash,
-          userId: user.id
-        }
-      });
+      // Use the telegramClient to verify the code
+      const result = await telegramClient.verifyCode(phone, code, phoneCodeHash, user.id);
       
-      console.log("Response from verify-code:", data, error);
+      console.log("Response from verify-code:", result);
       
-      if (error) {
-        console.error("Error from edge function:", error);
-        throw new Error(`Failed to verify code: ${error}`);
-      }
-      
-      if (!data || !data.success || !data.sessionId) {
-        console.error("Invalid response from edge function:", data);
+      if (!result || !result.success || !result.sessionId) {
+        console.error("Invalid response from edge function:", result);
         throw new Error("Failed to create Telegram session");
       }
       
       // Notify parent component of successful verification
-      onSuccess(data.sessionId, phone);
+      onSuccess(result.sessionId, phone);
       
       toast({
         title: "Authentication Successful",
