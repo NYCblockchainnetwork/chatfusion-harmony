@@ -1,7 +1,7 @@
 
 import React from 'react';
-import { Alert, AlertCircle, AlertDescription } from "@/components/ui/alert";
-import { MessageCircle, User } from "lucide-react";
+import { AlertCircle, MessageCircle, User } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { TelegramMessage } from '@/utils/telegramMessages';
 
