@@ -3,9 +3,13 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTelegram } from '@/contexts/TelegramContext';
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const Settings = () => {
   const { user } = useAuth();
+  const { isConnected, error } = useTelegram();
   
   return (
     <div className="min-h-screen bg-gray-50">
@@ -56,14 +60,34 @@ const Settings = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-gray-500 mb-4">
-                  The Telegram integration is currently using the mock implementation for browser compatibility.
-                </p>
-                <div className="flex items-center bg-amber-50 p-3 rounded border border-amber-200">
-                  <p className="text-sm text-amber-700">
-                    Note: Full Telegram integration requires a Node.js environment and cannot run directly in browsers.
-                    The app is currently using simulated data for demonstration purposes.
+                <Alert variant={error ? "destructive" : (isConnected ? "default" : "warning")} className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>
+                    {error ? "Integration Error" : (isConnected ? "Using Mock Data" : "Not Connected")}
+                  </AlertTitle>
+                  <AlertDescription>
+                    {error 
+                      ? "There was an error connecting to Telegram. Using mock data instead."
+                      : "This application is using simulated Telegram data for demonstration purposes."}
+                  </AlertDescription>
+                </Alert>
+                
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-700">
+                    <strong>Browser Compatibility Note:</strong> The official Telegram client library requires 
+                    Node.js and cannot run directly in browsers due to its dependencies on Node-specific 
+                    modules like <code>crypto</code> and <code>net</code>.
                   </p>
+                  
+                  <p className="text-sm text-gray-700">
+                    For a production application, you would need to:
+                  </p>
+                  
+                  <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                    <li>Create a backend service that uses the Telegram API</li>
+                    <li>Expose a REST or WebSocket API for your frontend</li>
+                    <li>Handle authentication and message processing on the server</li>
+                  </ul>
                 </div>
               </CardContent>
             </Card>

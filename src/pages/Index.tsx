@@ -4,8 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import TelegramAuthSection from '@/components/TelegramAuthSection';
 import TelegramMessageViewer from '@/components/TelegramMessageViewer';
 import Header from '@/components/Header';
+import { useTelegram } from '@/contexts/TelegramContext';
 
 const Index = () => {
+  const { isConnected } = useTelegram();
+  
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />

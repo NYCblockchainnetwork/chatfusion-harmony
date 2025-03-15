@@ -11,6 +11,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
+import TelegramProvider from "./contexts/TelegramContext";
 
 // Create a query client with defaults
 const queryClient = new QueryClient({
@@ -23,34 +24,29 @@ const queryClient = new QueryClient({
 });
 
 const App = () => {
-  const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Global error handler
+  // Global error handler and initialization
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
       console.error("Global error caught:", event.error);
-      setError(event.error);
     };
 
     window.addEventListener("error", handleError);
     
-    // Initialize the app and check for compatibility
-    const checkCompatibility = async () => {
+    // Initialize app
+    const initializeApp = async () => {
       try {
-        // Check if we're in a browser environment where Buffer isn't available
-        if (typeof window !== 'undefined' && typeof Buffer === 'undefined') {
-          console.warn("Running in browser environment without Buffer support. Using mock implementation.");
-        }
+        // Simple initialization check
+        console.log("App initializing...");
         setIsLoading(false);
       } catch (err) {
         console.error("Initialization error:", err);
-        setError(err instanceof Error ? err : new Error("Unknown initialization error"));
         setIsLoading(false);
       }
     };
     
-    checkCompatibility();
+    initializeApp();
     
     return () => window.removeEventListener("error", handleError);
   }, []);
@@ -67,66 +63,44 @@ const App = () => {
     );
   }
 
-  // If there's a critical error, display it instead of the app
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-lg">
-          <h1 className="text-xl font-bold text-red-600 mb-4">Application Error</h1>
-          <p className="mb-4 text-gray-700">
-            Sorry, the application encountered an error. This is likely because the Telegram
-            library is not fully compatible with browser environments.
-          </p>
-          <div className="bg-gray-100 p-4 rounded mb-4 overflow-auto max-h-40">
-            <code className="text-sm text-gray-800">{error.message}</code>
-          </div>
-          <button
-            onClick={() => window.location.reload()}
-            className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-          >
-            Reload Application
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route 
-                path="/login" 
-                element={
-                  <UnauthGuard>
-                    <Login />
-                  </UnauthGuard>
-                } 
-              />
-              <Route 
-                path="/" 
-                element={
-                  <AuthGuard>
-                    <Index />
-                  </AuthGuard>
-                } 
-              />
-              <Route 
-                path="/settings" 
-                element={
-                  <AuthGuard>
-                    <Settings />
-                  </AuthGuard>
-                } 
-              />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+          <TelegramProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route 
+                  path="/login" 
+                  element={
+                    <UnauthGuard>
+                      <Login />
+                    </UnauthGuard>
+                  } 
+                />
+                <Route 
+                  path="/" 
+                  element={
+                    <AuthGuard>
+                      <Index />
+                    </AuthGuard>
+                  } 
+                />
+                <Route 
+                  path="/settings" 
+                  element={
+                    <AuthGuard>
+                      <Settings />
+                    </AuthGuard>
+                  } 
+                />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TelegramProvider>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
