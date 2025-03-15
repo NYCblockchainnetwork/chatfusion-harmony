@@ -24,7 +24,7 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
   onCancel
 }) => {
   const { isAuthenticated, user } = useAuth();
-  const [authMethod, setAuthMethod] = useState<"phone" | "qr">("qr");
+  const [authMethod, setAuthMethod] = useState<"phone" | "qr">("qr"); // Default to QR authentication
   
   useEffect(() => {
     if (!isAuthenticated) {
