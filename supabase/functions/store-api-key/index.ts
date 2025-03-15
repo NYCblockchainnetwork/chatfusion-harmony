@@ -70,8 +70,19 @@ serve(async (req) => {
       return createErrorResponse("You can only manage your own API keys", 403);
     }
 
+    // Get the secret key from environment variables when the service is a predefined one
+    let finalApiKey = apiKey;
+    if (service === 'telegram_api_id' || service === 'telegram_api_hash') {
+      // Use the actual secret value stored in Supabase secrets if the apiKey matches the env var name
+      const secretValue = Deno.env.get(service);
+      if (apiKey === service && secretValue) {
+        console.log(`Using secret value for ${service} from environment`);
+        finalApiKey = secretValue;
+      }
+    }
+
     // Delete the API key if empty
-    if (!apiKey || apiKey.trim() === "") {
+    if (!finalApiKey || finalApiKey.trim() === "") {
       console.log("Deleting API key due to empty value");
       const { error: deleteError } = await supabaseClient
         .from("user_api_keys")
@@ -96,7 +107,7 @@ serve(async (req) => {
         {
           user_id: userId,
           service,
-          api_key: apiKey,
+          api_key: finalApiKey,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id,service" }

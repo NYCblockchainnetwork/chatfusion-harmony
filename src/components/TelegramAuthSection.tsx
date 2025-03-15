@@ -20,8 +20,8 @@ const TelegramAuthSection = () => {
   
   const form = useForm({
     defaultValues: {
-      apiId: '',
-      apiHash: '',
+      apiId: import.meta.env.VITE_TELEGRAM_API_ID || '',
+      apiHash: import.meta.env.VITE_TELEGRAM_API_HASH || '',
     },
   });
 
@@ -52,8 +52,11 @@ const TelegramAuthSection = () => {
         });
         
         // If we have credentials, pre-fill the form
-        if (apiId && apiHash) {
+        if (apiId && apiId !== 'telegram_api_id') {
           form.setValue('apiId', apiId);
+        }
+        
+        if (apiHash && apiHash !== 'telegram_api_hash') {
           form.setValue('apiHash', apiHash);
         }
       } catch (error) {
