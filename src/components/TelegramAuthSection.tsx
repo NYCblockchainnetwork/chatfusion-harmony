@@ -97,21 +97,32 @@ const TelegramAuthSection = () => {
     try {
       console.log("Saving Telegram credentials for user:", user.id);
       
-      // Save using predefined environment variables if available
-      let finalApiId = apiId === import.meta.env.VITE_TELEGRAM_API_ID ? 'telegram_api_id' : apiId;
-      let finalApiHash = apiHash === import.meta.env.VITE_TELEGRAM_API_HASH ? 'telegram_api_hash' : apiHash;
+      // When using the pre-configured API credentials from .env, 
+      // pass the exact environment variable name to trigger the Edge Function
+      // to use the stored secret value
+      
+      // If user enters the actual placeholders as defined in .env file,
+      // we'll use the secret values from Supabase
+      const useApiIdSecret = apiId === import.meta.env.VITE_TELEGRAM_API_ID;
+      const useApiHashSecret = apiHash === import.meta.env.VITE_TELEGRAM_API_HASH;
       
       // Save API ID first
-      console.log("Saving API ID...", finalApiId);
-      const apiIdSaved = await saveApiKey('telegram_api_id', finalApiId);
+      console.log("Saving API ID...");
+      const apiIdSaved = await saveApiKey(
+        'telegram_api_id', 
+        useApiIdSecret ? 'telegram_api_id' : apiId
+      );
       
       if (!apiIdSaved) {
         throw new Error("Failed to save API ID");
       }
       
       // Then save API Hash
-      console.log("Saving API Hash...", finalApiHash);
-      const apiHashSaved = await saveApiKey('telegram_api_hash', finalApiHash);
+      console.log("Saving API Hash...");
+      const apiHashSaved = await saveApiKey(
+        'telegram_api_hash', 
+        useApiHashSecret ? 'telegram_api_hash' : apiHash
+      );
       
       if (!apiHashSaved) {
         throw new Error("Failed to save API Hash");
@@ -159,7 +170,6 @@ const TelegramAuthSection = () => {
       // Remove sensitive API credentials via Edge Function
       await saveApiKey('telegram_api_id', '');
       await saveApiKey('telegram_api_hash', '');
-      await saveApiKey('telegram_session', '');
       
       // Update user settings
       await updateSettings({

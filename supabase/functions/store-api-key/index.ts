@@ -71,23 +71,31 @@ serve(async (req) => {
       return createErrorResponse("You can only manage your own API keys", 403);
     }
 
-    // Get the secret key from environment variables when the service is a predefined one
+    // Check for special case: Using environment secret values for Telegram
     let finalApiKey = apiKey;
     
-    // Check if we need to use environment secrets for Telegram credentials
-    if (apiKey === 'telegram_api_id' || apiKey === 'telegram_api_hash') {
-      // Get the actual secret from Supabase environment
-      const secretValue = Deno.env.get(apiKey);
+    // If the service is telegram_api_id or telegram_api_hash AND
+    // the value is exactly 'telegram_api_id' or 'telegram_api_hash', get value from env
+    if (service === 'telegram_api_id' && apiKey === 'telegram_api_id') {
+      const secretValue = Deno.env.get('telegram_api_id');
       if (secretValue) {
-        console.log(`Using secret value for ${apiKey} from Supabase environment`);
+        console.log("Using Telegram API ID from Supabase secrets");
         finalApiKey = secretValue;
-        console.log(`Secret value found, length: ${finalApiKey.length}`);
       } else {
-        console.error(`Secret ${apiKey} not found in environment variables`);
-        return createErrorResponse(`Error: Required secret ${apiKey} not found in Supabase`);
+        console.error("telegram_api_id secret not found in environment");
+        return createErrorResponse("Error: Required secret telegram_api_id not found in Supabase");
+      }
+    } else if (service === 'telegram_api_hash' && apiKey === 'telegram_api_hash') {
+      const secretValue = Deno.env.get('telegram_api_hash');
+      if (secretValue) {
+        console.log("Using Telegram API Hash from Supabase secrets");
+        finalApiKey = secretValue;
+      } else {
+        console.error("telegram_api_hash secret not found in environment");
+        return createErrorResponse("Error: Required secret telegram_api_hash not found in Supabase");
       }
     }
-
+    
     // Delete the API key if empty
     if (!finalApiKey || finalApiKey.trim() === "") {
       console.log("Deleting API key due to empty value");
