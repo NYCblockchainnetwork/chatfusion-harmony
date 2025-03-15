@@ -17,36 +17,40 @@ export interface TelegramMessage {
 
 export async function fetchMessagesFromHandles(
   handles: string[],
-  limit: number = 5
+  limit: number = 5,
+  userId?: string
 ): Promise<Record<string, TelegramMessage[]>> {
   try {
     console.log("Starting to fetch messages for handles:", handles);
-    const userId = localStorage.getItem('userId'); // Get the current user ID
+    
+    // Check for userId
     if (!userId) {
-      console.error("No userId found in localStorage");
-      throw new Error("User not authenticated");
+      console.error("No userId provided to fetchMessagesFromHandles");
+      throw new Error("User not authenticated. Please log in and try again.");
     }
 
-    // Get Telegram credentials from localStorage (in production this would be from Supabase)
-    const telegramApiId = localStorage.getItem(`telegram_api_id_${userId}`);
-    const telegramApiHash = localStorage.getItem(`telegram_api_hash_${userId}`);
-    const telegramSessionString = localStorage.getItem(`telegram_session_${userId}`);
+    console.log("Fetching messages for user ID:", userId);
 
-    console.log("Retrieved credentials:", { 
-      apiId: telegramApiId ? "exists" : "missing", 
-      apiHash: telegramApiHash ? "exists" : "missing",
-      sessionString: telegramSessionString ? "exists" : "missing"
+    // Get Telegram credentials from localStorage (in production this would be from Supabase)
+    const apiId = localStorage.getItem(`telegram_api_id_${userId}`);
+    const apiHash = localStorage.getItem(`telegram_api_hash_${userId}`);
+    const sessionString = localStorage.getItem(`telegram_session_${userId}`);
+
+    console.log("Retrieved Telegram credentials:", { 
+      apiId: apiId ? "exists" : "missing", 
+      apiHash: apiHash ? "exists" : "missing",
+      sessionString: sessionString ? "exists" : "missing"
     });
 
-    if (!telegramApiId || !telegramApiHash) {
+    if (!apiId || !apiHash) {
       throw new Error("Telegram API credentials not found. Please set up Telegram integration first.");
     }
 
     // Create telegram client with credentials
     const credentials: TelegramCredentials = {
-      apiId: parseInt(telegramApiId, 10),
-      apiHash: telegramApiHash,
-      sessionString: telegramSessionString || undefined
+      apiId: parseInt(apiId, 10),
+      apiHash: apiHash,
+      sessionString: sessionString || undefined
     };
 
     console.log("Creating Telegram client...");
@@ -60,7 +64,7 @@ export async function fetchMessagesFromHandles(
       
       // Save the session string for future use if it changed
       const newSessionString = stringSession.save();
-      if (newSessionString !== telegramSessionString) {
+      if (newSessionString !== sessionString) {
         console.log("Saving new session string to localStorage");
         localStorage.setItem(`telegram_session_${userId}`, newSessionString);
       }

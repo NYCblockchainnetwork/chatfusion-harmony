@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,7 @@ import { toast } from "@/hooks/use-toast";
 import { MessageCircle, Search, User, AlertCircle } from "lucide-react";
 import { fetchMessagesFromHandles, TelegramMessage } from '@/utils/telegramMessages';
 import { useUserSettings } from '@/hooks/use-user-settings';
+import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 const TelegramMessageViewer = () => {
@@ -18,8 +18,8 @@ const TelegramMessageViewer = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { settings, updateSettings } = useUserSettings();
+  const { user } = useAuth();
   
-  // Load saved handles when component mounts
   useEffect(() => {
     if (settings?.telegramHandles && settings.telegramHandles.length > 0) {
       console.log("Loaded saved handles from settings:", settings.telegramHandles);
@@ -37,12 +37,10 @@ const TelegramMessageViewer = () => {
       return;
     }
     
-    // Clean handle - remove @ if present
     const cleanHandle = handleInput.trim().startsWith('@') 
       ? handleInput.trim().substring(1) 
       : handleInput.trim();
     
-    // Check if handle already exists
     if (handles.includes(cleanHandle)) {
       toast({
         title: "Already added",
@@ -57,7 +55,6 @@ const TelegramMessageViewer = () => {
     setHandles(newHandles);
     setHandleInput('');
     
-    // Save handles to database via userSettings
     try {
       await updateSettings({
         telegramHandles: newHandles
@@ -83,12 +80,10 @@ const TelegramMessageViewer = () => {
     const newHandles = handles.filter(h => h !== handle);
     setHandles(newHandles);
     
-    // Also remove messages for this handle
     const newMessages = { ...messages };
     delete newMessages[handle];
     setMessages(newMessages);
     
-    // Update handles in database
     try {
       await updateSettings({
         telegramHandles: newHandles
@@ -113,21 +108,30 @@ const TelegramMessageViewer = () => {
       });
       return;
     }
+
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "You must be signed in to fetch messages",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
     
     try {
       console.log("Starting to fetch messages for handles:", handles);
-      const fetchedMessages = await fetchMessagesFromHandles(handles);
+      console.log("User ID:", user.id);
       
-      // Check if any errors in the responses
+      const fetchedMessages = await fetchMessagesFromHandles(handles, 5, user.id);
+      
       const handleErrors = Object.entries(fetchedMessages)
         .filter(([_, msgs]) => msgs.length === 1 && msgs[0].id === 0 && msgs[0].text.startsWith('Error'))
         .map(([handle, msgs]) => `@${handle}: ${msgs[0].text.replace('Error fetching messages for @' + handle + ': ', '')}`);
       
       if (handleErrors.length > 0) {
-        // There were errors for some handles
         setError(`Issues fetching messages for some handles: ${handleErrors.join('; ')}`);
       }
       
@@ -232,7 +236,6 @@ const TelegramMessageViewer = () => {
                     @{handle}
                   </h4>
                   
-                  {/* Show error message if this handle has an error */}
                   {handleMessages.length === 1 && handleMessages[0].id === 0 && handleMessages[0].text.startsWith('Error') && (
                     <Alert variant="destructive" className="mb-3">
                       <AlertCircle className="h-4 w-4" />
@@ -241,7 +244,6 @@ const TelegramMessageViewer = () => {
                   )}
                   
                   <div className="space-y-3">
-                    {/* Don't show error messages here */}
                     {handleMessages
                       .filter(msg => !(msg.id === 0 && msg.text.startsWith('Error')))
                       .map((message) => (
