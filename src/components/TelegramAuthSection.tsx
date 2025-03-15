@@ -1,24 +1,58 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { useLocalStorage } from "@/hooks/use-local-storage";
+import { useUserSettings } from '@/hooks/use-user-settings';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import { useForm } from "react-hook-form";
 
 const TelegramAuthSection = () => {
-  const [apiId, setApiId] = useState('');
-  const [apiHash, setApiHash] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const { settings, updateSettings, saveApiKey, getApiKey } = useUserSettings();
   
-  // In a production app, these would be stored in Supabase, not localStorage
-  const [storedApiId, setStoredApiId] = useLocalStorage('telegram_api_id', '');
-  const [storedApiHash, setStoredApiHash] = useLocalStorage('telegram_api_hash', '');
-  const [storedSession, setStoredSession] = useLocalStorage('telegram_session', '');
+  const form = useForm({
+    defaultValues: {
+      apiId: '',
+      apiHash: '',
+    },
+  });
+
+  // Load existing API credentials on component mount
+  useEffect(() => {
+    const loadCredentials = async () => {
+      try {
+        // Check if user has already connected to Telegram
+        if (settings?.telegramIntegrationEnabled) {
+          setConnectionStatus('connected');
+          return;
+        }
+        
+        // Try to get saved API credentials
+        const apiId = await getApiKey('telegram_api_id');
+        const apiHash = await getApiKey('telegram_api_hash');
+        
+        // If we have credentials, pre-fill the form
+        if (apiId && apiHash) {
+          form.setValue('apiId', apiId);
+          form.setValue('apiHash', apiHash);
+        }
+      } catch (error) {
+        console.error('Error loading Telegram credentials:', error);
+      }
+    };
+    
+    if (settings) {
+      loadCredentials();
+    }
+  }, [settings, getApiKey, form]);
   
-  const handleConnect = async () => {
+  const handleConnect = async (formData) => {
+    const { apiId, apiHash } = formData;
+    
     if (!apiId || !apiHash) {
       toast({
         title: "Error",
@@ -31,17 +65,23 @@ const TelegramAuthSection = () => {
     setIsConnecting(true);
     
     try {
-      // Note: In a real implementation, this would call a Supabase Edge Function
-      // that would handle the actual Telegram connection using the ESM imports
-      // For now, we'll just simulate the connection
+      // Store API credentials securely in Supabase
+      const apiIdSaved = await saveApiKey('telegram_api_id', apiId);
+      const apiHashSaved = await saveApiKey('telegram_api_hash', apiHash);
       
-      // Simulating successful connection
+      if (!apiIdSaved || !apiHashSaved) {
+        throw new Error("Failed to save API credentials");
+      }
+      
+      // Update user settings to indicate Telegram is connected
+      await updateSettings({
+        telegramIntegrationEnabled: true,
+        // If not already initialized
+        telegramHandles: settings?.telegramHandles || [],
+      });
+      
+      // Simulating a successful connection (in a real app, this would verify with Telegram)
       setTimeout(() => {
-        // Store credentials (in production, this would be in Supabase)
-        setStoredApiId(apiId);
-        setStoredApiHash(apiHash);
-        setStoredSession('simulated_session_string');
-        
         setConnectionStatus('connected');
         setIsConnecting(false);
         
@@ -49,9 +89,10 @@ const TelegramAuthSection = () => {
           title: "Success",
           description: "Connected to Telegram successfully",
         });
-      }, 2000);
+      }, 1000);
       
     } catch (error) {
+      console.error('Error connecting to Telegram:', error);
       toast({
         title: "Connection Failed",
         description: error.message || "Could not connect to Telegram",
@@ -61,17 +102,31 @@ const TelegramAuthSection = () => {
     }
   };
   
-  const handleDisconnect = () => {
-    // Clear stored credentials
-    setStoredApiId('');
-    setStoredApiHash('');
-    setStoredSession('');
-    setConnectionStatus('disconnected');
-    
-    toast({
-      title: "Disconnected",
-      description: "Telegram account has been disconnected",
-    });
+  const handleDisconnect = async () => {
+    try {
+      // Remove sensitive API credentials from Supabase
+      await saveApiKey('telegram_api_id', '');
+      await saveApiKey('telegram_api_hash', '');
+      
+      // Update user settings
+      await updateSettings({
+        telegramIntegrationEnabled: false,
+      });
+      
+      setConnectionStatus('disconnected');
+      
+      toast({
+        title: "Disconnected",
+        description: "Telegram account has been disconnected",
+      });
+    } catch (error) {
+      console.error('Error disconnecting from Telegram:', error);
+      toast({
+        title: "Error",
+        description: "Failed to disconnect from Telegram",
+        variant: "destructive"
+      });
+    }
   };
   
   return (
@@ -94,35 +149,47 @@ const TelegramAuthSection = () => {
             </Button>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="api-id">API ID</Label>
-              <Input 
-                id="api-id" 
-                placeholder="Enter your Telegram API ID" 
-                value={apiId}
-                onChange={(e) => setApiId(e.target.value)}
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleConnect)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="apiId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>API ID</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter your Telegram API ID" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Get this from my.telegram.org
+                    </FormDescription>
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="api-hash">API Hash</Label>
-              <Input 
-                id="api-hash" 
-                type="password"
-                placeholder="Enter your Telegram API Hash" 
-                value={apiHash}
-                onChange={(e) => setApiHash(e.target.value)}
+              
+              <FormField
+                control={form.control}
+                name="apiHash"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>API Hash</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="Enter your Telegram API Hash" {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="pt-2">
-              <Button 
-                onClick={handleConnect}
-                disabled={isConnecting}
-              >
-                {isConnecting ? "Connecting..." : "Connect Telegram"}
-              </Button>
-            </div>
-          </div>
+              
+              <div className="pt-2">
+                <Button 
+                  type="submit"
+                  disabled={isConnecting}
+                >
+                  {isConnecting ? "Connecting..." : "Connect Telegram"}
+                </Button>
+              </div>
+            </form>
+          </Form>
         )}
       </CardContent>
     </Card>

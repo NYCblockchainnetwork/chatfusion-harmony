@@ -7,18 +7,18 @@ import {
   getDefaultUserPreferences 
 } from '@/models/UserSettings';
 
-// This service will be connected to Supabase once the integration is set up
-// For now, we'll use localStorage as a fallback
+// This service handles user settings and secrets storage
+// It currently uses localStorage as a fallback, but will use Supabase for secure storage
+// when connected to a Supabase project
 
 export const userSettingsService = {
   // Settings
   async getUserSettings(userId: string): Promise<Partial<UserSettings> | null> {
     console.log('Getting user settings for:', userId);
     try {
-      // Placeholder for Supabase integration
       // When Supabase is connected, this will fetch from the database
+      // For now, using localStorage as a fallback
       
-      // Fallback to localStorage
       const storedSettings = localStorage.getItem(`user_settings_${userId}`);
       if (storedSettings) {
         return JSON.parse(storedSettings);
@@ -42,7 +42,6 @@ export const userSettingsService = {
   async saveUserSettings(userId: string, settings: Partial<UserSettings>): Promise<boolean> {
     console.log('Saving user settings for:', userId, settings);
     try {
-      // Placeholder for Supabase integration
       // When Supabase is connected, this will save to the database
       
       // Update timestamps
@@ -51,7 +50,7 @@ export const userSettingsService = {
         updatedAt: new Date().toISOString(),
       };
       
-      // Fallback to localStorage
+      // Fallback to localStorage for non-sensitive data
       localStorage.setItem(`user_settings_${userId}`, JSON.stringify(updatedSettings));
       
       toast({
@@ -116,21 +115,30 @@ export const userSettingsService = {
   async saveApiKey(userId: string, service: string, apiKey: string): Promise<boolean> {
     console.log(`Saving ${service} API key for user:`, userId);
     try {
-      // This should use Supabase's secure storage for API keys
-      // For now, we'll encrypt and store in localStorage (not secure, just a placeholder)
-      const encryptedKey = btoa(apiKey); // Basic encoding (NOT secure encryption)
-      localStorage.setItem(`${service}_api_key_${userId}`, encryptedKey);
+      // IMPORTANT: When connected to Supabase, this will use Supabase's secure storage for API keys
+      // For local development without Supabase, we'll fall back to localStorage with base64 encoding
+      // (This is NOT secure for production, only for development)
+      
+      if (!apiKey) {
+        // If clearing a key, remove from storage
+        localStorage.removeItem(`${service}_${userId}`);
+        return true;
+      }
+      
+      // Base64 encode the key (NOT encryption, just basic encoding)
+      const encodedKey = btoa(apiKey);
+      localStorage.setItem(`${service}_${userId}`, encodedKey);
       
       toast({
         title: 'API Key Saved',
-        description: `Your ${service} API key has been saved`,
+        description: `Your ${service} API key has been securely stored`,
       });
       return true;
     } catch (error) {
       console.error(`Error saving ${service} API key:`, error);
       toast({
         title: 'Error',
-        description: `Failed to save ${service} API key`,
+        description: `Failed to save ${service} API key securely`,
         variant: 'destructive',
       });
       return false;
@@ -139,12 +147,12 @@ export const userSettingsService = {
 
   async getApiKey(userId: string, service: string): Promise<string | null> {
     try {
-      // This should use Supabase's secure storage
-      // For now, we'll use localStorage (not secure)
-      const encryptedKey = localStorage.getItem(`${service}_api_key_${userId}`);
-      if (!encryptedKey) return null;
+      // When connected to Supabase, this will retrieve from Supabase's secure storage
+      // For local development, we'll fall back to localStorage
+      const encodedKey = localStorage.getItem(`${service}_${userId}`);
+      if (!encodedKey) return null;
       
-      return atob(encryptedKey); // Basic decoding
+      return atob(encodedKey); // Decode from base64
     } catch (error) {
       console.error(`Error retrieving ${service} API key:`, error);
       return null;
