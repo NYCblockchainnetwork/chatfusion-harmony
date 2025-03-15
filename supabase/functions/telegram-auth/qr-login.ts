@@ -42,9 +42,18 @@ export async function handleQrLogin(supabase, userId) {
     const client = new TelegramClient(stringSession, parseInt(apiId, 10), apiHash, {
       connectionRetries: 3,
       useWSS: true,
+      timeout: 10000,
+      baseLogger: console
     });
     
-    await client.connect();
+    // Use proper async connection
+    await client.start({
+      phoneNumber: async () => "",
+      password: async () => "",
+      onError: (err) => console.error("Connection error:", err),
+      phoneCode: async () => "",
+    });
+    
     console.log("Connected to Telegram");
     
     // Generate QR login data
@@ -147,9 +156,18 @@ export async function processQrCodeLogin(supabase, userId, token) {
     const client = new TelegramClient(stringSession, parseInt(apiId, 10), apiHash, {
       connectionRetries: 3,
       useWSS: true,
+      timeout: 10000,
+      baseLogger: console
     });
     
-    await client.connect();
+    // Use proper async connection
+    await client.start({
+      phoneNumber: async () => "",
+      password: async () => "",
+      onError: (err) => console.error("Connection error:", err),
+      phoneCode: async () => "",
+    });
+    
     console.log("Connected to Telegram with saved session");
     
     // Check authorization status
