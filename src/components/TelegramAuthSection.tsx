@@ -11,11 +11,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
+// Test values that would normally come from environment variables
+const TEST_TELEGRAM_API_ID = "12345"; // Replace with test value
+const TEST_TELEGRAM_API_HASH = "abcdef1234567890abcdef1234567890"; // Replace with test value
+
 const TelegramAuthSection = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { settings, updateSettings, saveApiKey, getApiKey } = useUserSettings();
+  const { settings, updateSettings } = useUserSettings();
   const { user } = useAuth();
   
   const form = useForm({
@@ -25,33 +29,48 @@ const TelegramAuthSection = () => {
     },
   });
 
-  // Load existing API credentials on component mount
+  // Load existing API credentials from localStorage on component mount
   useEffect(() => {
-    const loadCredentials = async () => {
-      if (!user?.id) return;
-      
-      try {
-        // Check if user has already connected to Telegram
-        if (settings?.telegramIntegrationEnabled) {
-          setConnectionStatus('connected');
-        }
-        
-        // Load saved credentials if any
-        const apiId = await getApiKey('telegram_api_id');
-        const apiHash = await getApiKey('telegram_api_hash');
-        
-        if (apiId) form.setValue('apiId', apiId);
-        if (apiHash) form.setValue('apiHash', apiHash);
-      } catch (error) {
-        console.error('Error loading Telegram credentials:', error);
-        setErrorMessage("Failed to load saved credentials");
-      }
-    };
+    if (!user?.id) return;
     
-    if (settings && user?.id) {
-      loadCredentials();
+    try {
+      // Check if user has already connected to Telegram
+      if (settings?.telegramIntegrationEnabled) {
+        setConnectionStatus('connected');
+      }
+      
+      // Load saved credentials from localStorage if any
+      const storedApiId = localStorage.getItem(`telegram_api_id_${user.id}`);
+      const storedApiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
+      
+      if (storedApiId) form.setValue('apiId', storedApiId);
+      if (storedApiHash) form.setValue('apiHash', storedApiHash);
+    } catch (error) {
+      console.error('Error loading Telegram credentials:', error);
+      setErrorMessage("Failed to load saved credentials");
     }
-  }, [settings, user, form, getApiKey]);
+  }, [settings, user, form]);
+
+  // Test function to bypass Edge Function and use localStorage
+  const saveApiKeyToLocalStorage = async (service: string, value: string): Promise<boolean> => {
+    if (!user?.id) return false;
+
+    try {
+      // For testing, just save to localStorage
+      localStorage.setItem(`${service}_${user.id}`, value);
+      console.log(`Saved ${service} to localStorage:`, value);
+      return true;
+    } catch (error) {
+      console.error(`Error saving ${service}:`, error);
+      return false;
+    }
+  };
+
+  // Test function to get API key from localStorage
+  const getApiKeyFromLocalStorage = (service: string): string | null => {
+    if (!user?.id) return null;
+    return localStorage.getItem(`${service}_${user.id}`);
+  };
   
   const handleUseEnvSecrets = async () => {
     if (!user?.id) {
@@ -67,18 +86,17 @@ const TelegramAuthSection = () => {
     setErrorMessage(null);
     
     try {
-      console.log("Using environment secrets for Telegram");
+      console.log("Using test values for Telegram credentials");
       
-      // First save API ID
-      const apiIdResult = await saveApiKey('telegram_api_id', 'USE_ENV_SECRET');
+      // Save test values to localStorage
+      const apiIdResult = await saveApiKeyToLocalStorage('telegram_api_id', TEST_TELEGRAM_API_ID);
       if (!apiIdResult) {
-        throw new Error("Failed to save API ID from environment secrets");
+        throw new Error("Failed to save API ID");
       }
       
-      // Then save API Hash
-      const apiHashResult = await saveApiKey('telegram_api_hash', 'USE_ENV_SECRET');
+      const apiHashResult = await saveApiKeyToLocalStorage('telegram_api_hash', TEST_TELEGRAM_API_HASH);
       if (!apiHashResult) {
-        throw new Error("Failed to save API Hash from environment secrets");
+        throw new Error("Failed to save API Hash");
       }
       
       // Update settings
@@ -91,14 +109,14 @@ const TelegramAuthSection = () => {
       
       toast({
         title: "Success",
-        description: "Connected to Telegram using preconfigured credentials",
+        description: "Connected to Telegram using test credentials",
       });
     } catch (error) {
-      console.error('Error connecting to Telegram with env secrets:', error);
-      setErrorMessage(error.message || "Failed to use preconfigured credentials");
+      console.error('Error connecting to Telegram with test values:', error);
+      setErrorMessage(error.message || "Failed to use test credentials");
       toast({
         title: "Connection Failed",
-        description: error.message || "Failed to use preconfigured credentials",
+        description: error.message || "Failed to use test credentials",
         variant: "destructive"
       });
     } finally {
@@ -131,14 +149,14 @@ const TelegramAuthSection = () => {
     setErrorMessage(null);
     
     try {
-      // Save API ID
-      const apiIdSaved = await saveApiKey('telegram_api_id', apiId);
+      // Save API ID to localStorage
+      const apiIdSaved = await saveApiKeyToLocalStorage('telegram_api_id', apiId);
       if (!apiIdSaved) {
         throw new Error("Failed to save API ID");
       }
       
-      // Save API Hash
-      const apiHashSaved = await saveApiKey('telegram_api_hash', apiHash);
+      // Save API Hash to localStorage
+      const apiHashSaved = await saveApiKeyToLocalStorage('telegram_api_hash', apiHash);
       if (!apiHashSaved) {
         throw new Error("Failed to save API Hash");
       }
@@ -179,9 +197,9 @@ const TelegramAuthSection = () => {
     }
     
     try {
-      // Remove API credentials
-      await saveApiKey('telegram_api_id', '');
-      await saveApiKey('telegram_api_hash', '');
+      // Remove API credentials from localStorage
+      localStorage.removeItem(`telegram_api_id_${user.id}`);
+      localStorage.removeItem(`telegram_api_hash_${user.id}`);
       
       // Update settings
       await updateSettings({
@@ -237,9 +255,9 @@ const TelegramAuthSection = () => {
         ) : (
           <div className="space-y-6">
             <div className="bg-amber-50 p-4 rounded-md border border-amber-200">
-              <p className="text-amber-700 font-medium">Use Preconfigured Credentials</p>
+              <p className="text-amber-700 font-medium">Use Test Credentials</p>
               <p className="text-sm text-amber-600 mb-3">
-                This app has preconfigured Telegram API credentials you can use.
+                For testing, you can use preconfigured Telegram API credentials.
               </p>
               <Button 
                 type="button"
@@ -248,7 +266,7 @@ const TelegramAuthSection = () => {
                 onClick={handleUseEnvSecrets}
                 disabled={isConnecting}
               >
-                {isConnecting ? "Connecting..." : "Use Preconfigured Credentials"}
+                {isConnecting ? "Connecting..." : "Use Test Credentials"}
               </Button>
             </div>
             

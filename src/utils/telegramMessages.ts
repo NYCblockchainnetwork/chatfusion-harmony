@@ -3,7 +3,6 @@
 
 import { toast } from "@/hooks/use-toast";
 import { createTelegramClient, TelegramCredentials } from "@/utils/telegramClient";
-import { userSettingsService } from "@/services/userSettingsService";
 
 export interface TelegramMessage {
   id: number;
@@ -32,10 +31,10 @@ export async function fetchMessagesFromHandles(
 
     console.log("Fetching messages for user ID:", userId);
 
-    // Get Telegram credentials from Edge Function
-    const apiId = await userSettingsService.getApiKey(userId, 'telegram_api_id');
-    const apiHash = await userSettingsService.getApiKey(userId, 'telegram_api_hash');
-    const sessionString = await userSettingsService.getApiKey(userId, 'telegram_session');
+    // Get Telegram credentials from localStorage for testing
+    const apiId = localStorage.getItem(`telegram_api_id_${userId}`);
+    const apiHash = localStorage.getItem(`telegram_api_hash_${userId}`);
+    const sessionString = localStorage.getItem(`telegram_session_${userId}`);
 
     console.log("Retrieved Telegram credentials:", { 
       apiId: apiId ? "exists" : "missing", 
@@ -88,7 +87,7 @@ async function processTelegramFetch(
       const newSessionString = stringSession.save();
       if (newSessionString !== credentials.sessionString) {
         console.log("Saving new session string");
-        await userSettingsService.saveApiKey(userId, 'telegram_session', newSessionString);
+        localStorage.setItem(`telegram_session_${userId}`, newSessionString);
       }
     } catch (connectionError) {
       console.error("Failed to connect to Telegram:", connectionError);
