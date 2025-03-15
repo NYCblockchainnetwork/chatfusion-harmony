@@ -1,9 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { useUserSettings } from '@/hooks/use-user-settings';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/components/ui/form";
@@ -40,11 +38,11 @@ const TelegramAuthSection = () => {
           return;
         }
         
-        // Try to get saved API credentials
-        const apiId = await getApiKey('telegram_api_id');
-        const apiHash = await getApiKey('telegram_api_hash');
+        // Try to get saved API credentials from Supabase via our service
+        const apiId = await getApiKey(user.id, 'telegram_api_id');
+        const apiHash = await getApiKey(user.id, 'telegram_api_hash');
         
-        console.log("Retrieved credentials from user settings:", {
+        console.log("Retrieved credentials from Supabase:", {
           apiId: apiId ? "exists" : "missing",
           apiHash: apiHash ? "exists" : "missing"
         });
@@ -90,13 +88,9 @@ const TelegramAuthSection = () => {
     try {
       console.log("Saving Telegram credentials for user:", user.id);
       
-      // Store API credentials securely in localStorage with user-specific keys
-      localStorage.setItem(`telegram_api_id_${user.id}`, apiId);
-      localStorage.setItem(`telegram_api_hash_${user.id}`, apiHash);
-      
-      // Also store with the service methods for compatibility
-      const apiIdSaved = await saveApiKey('telegram_api_id', apiId);
-      const apiHashSaved = await saveApiKey('telegram_api_hash', apiHash);
+      // Store API credentials securely in Supabase
+      const apiIdSaved = await saveApiKey(user.id, 'telegram_api_id', apiId);
+      const apiHashSaved = await saveApiKey(user.id, 'telegram_api_hash', apiHash);
       
       console.log("API credentials saved:", { apiIdSaved, apiHashSaved });
       
@@ -140,14 +134,10 @@ const TelegramAuthSection = () => {
     }
     
     try {
-      // Remove sensitive API credentials from localStorage
-      localStorage.removeItem(`telegram_api_id_${user.id}`);
-      localStorage.removeItem(`telegram_api_hash_${user.id}`);
-      localStorage.removeItem(`telegram_session_${user.id}`);
-      
-      // Remove from service storage as well
-      await saveApiKey('telegram_api_id', '');
-      await saveApiKey('telegram_api_hash', '');
+      // Remove sensitive API credentials from Supabase
+      await saveApiKey(user.id, 'telegram_api_id', '');
+      await saveApiKey(user.id, 'telegram_api_hash', '');
+      await saveApiKey(user.id, 'telegram_session', '');
       
       // Update user settings
       await updateSettings({
