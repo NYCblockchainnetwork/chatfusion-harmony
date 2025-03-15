@@ -30,6 +30,7 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
         
         const credentials = await telegramClient.getApiCredentials(user.id);
         
+        // Store credentials in localStorage for client-side use
         localStorage.setItem(`telegram_api_id_${user.id}`, credentials.apiId);
         localStorage.setItem(`telegram_api_hash_${user.id}`, credentials.apiHash);
         

@@ -7,12 +7,14 @@ interface PhoneNumberInputProps {
   phone: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   disabled: boolean;
+  error?: string | null;
 }
 
 const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({ 
   phone, 
   onChange, 
-  disabled 
+  disabled,
+  error
 }) => {
   return (
     <div className="space-y-2">
@@ -25,12 +27,18 @@ const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
         placeholder="+1234567890"
         value={phone}
         onChange={onChange}
-        className="w-full"
+        className={`w-full ${error ? 'border-red-500' : ''}`}
         disabled={disabled}
       />
-      <p className="text-xs text-muted-foreground">
-        Enter your phone number including country code (e.g., +1 for US).
-      </p>
+      {error ? (
+        <p className="text-xs text-red-500">
+          {error}
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Enter your phone number including country code (e.g., +1 for US).
+        </p>
+      )}
     </div>
   );
 };

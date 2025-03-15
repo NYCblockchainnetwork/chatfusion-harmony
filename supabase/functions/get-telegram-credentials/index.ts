@@ -7,8 +7,18 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface CredentialsRequest {
-  userId: string;
+// Function to create a response with CORS headers
+function createResponse(body: any, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// Function to create an error response
+function createErrorResponse(message: string, status = 500) {
+  console.error(`Error: ${message}`);
+  return createResponse({ error: message }, status);
 }
 
 serve(async (req) => {
@@ -20,157 +30,76 @@ serve(async (req) => {
   try {
     console.log("Received request to get-telegram-credentials");
     
-    // Parse request body
-    let data;
-    try {
-      data = await req.json() as CredentialsRequest;
-      console.log("Request data:", { userId: data.userId });
-    } catch (parseError) {
-      console.error("Error parsing request body:", parseError);
-      return new Response(
-        JSON.stringify({ 
-          error: "Invalid request body format",
-          details: parseError.message
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Check for authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error("No Authorization header provided");
+      return createErrorResponse("Authorization header is required", 401);
     }
     
-    const { userId } = data;
-    
-    // Validate inputs
-    if (!userId) {
-      console.error("Missing userId in request");
-      return new Response(
-        JSON.stringify({ 
-          error: "User ID is required",
-          details: "The request must include a userId field"
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Create a Supabase client with the authorization header from the request
+    // Get Supabase URL and key from env vars
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
     if (!supabaseUrl || !supabaseKey) {
       console.error("Missing Supabase configuration");
-      return new Response(
-        JSON.stringify({ 
-          error: "Server configuration error",
-          details: "Supabase configuration is incomplete"
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return createErrorResponse("Server configuration error", 500);
     }
     
-    // Extract the authorization header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      console.error("Missing Authorization header");
-      return new Response(
-        JSON.stringify({ 
-          error: "Authorization required",
-          details: "Authorization header is missing"
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Create Supabase client
+    const supabase = createClient(supabaseUrl, supabaseKey);
     
-    const supabaseClient = createClient(supabaseUrl, supabaseKey, {
-      global: { 
-        headers: { Authorization: authHeader } 
-      }
-    });
+    // Verify the JWT token and get the user's identity
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
-    // Verify user authentication
-    console.log("Verifying user authentication");
-    const { data: user, error: authError } = await supabaseClient.auth.getUser();
-    
-    if (authError) {
+    if (authError || !user) {
       console.error("Authentication error:", authError);
-      return new Response(
-        JSON.stringify({ 
-          error: "Authentication failed",
-          details: authError.message
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return createErrorResponse("Invalid authentication token", 401);
     }
     
-    if (!user) {
-      console.error("No authenticated user found");
-      return new Response(
-        JSON.stringify({ 
-          error: "Authentication required",
-          details: "No authenticated user found"
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Parse the request body
+    let body;
+    try {
+      body = await req.json();
+      console.log("Request body:", JSON.stringify(body));
+    } catch (error) {
+      console.error("Error parsing request body:", error);
+      return createErrorResponse("Invalid request body", 400);
     }
     
-    // Check if the authenticated user matches the requested userId
-    if (user.user.id !== userId) {
-      console.error("User ID mismatch:", {
-        authenticatedId: user.user.id,
-        requestedId: userId
-      });
-      return new Response(
-        JSON.stringify({ 
-          error: "Unauthorized",
-          details: "You can only access your own credentials"
-        }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Check for userId
+    const { userId } = body;
+    if (!userId) {
+      console.error("No userId provided in request");
+      return createErrorResponse("userId is required", 400);
     }
-
-    // Get credentials from environment variables
+    
+    // Verify that the authenticated user matches the requested userId
+    if (user.id !== userId) {
+      console.error(`User ID mismatch: ${user.id} vs ${userId}`);
+      return createErrorResponse("Not authorized to access this user's data", 403);
+    }
+    
+    // Get API credentials from env vars
     const apiId = Deno.env.get("telegram_api_id");
     const apiHash = Deno.env.get("telegram_api_hash");
-
+    
     if (!apiId || !apiHash) {
-      console.error("Missing Telegram API credentials in environment");
-      return new Response(
-        JSON.stringify({ 
-          error: "Telegram API credentials not configured on server",
-          details: "The server does not have the required Telegram API credentials"
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.error("Telegram API credentials not found in environment");
+      return createErrorResponse("Telegram API credentials not configured", 500);
     }
-
+    
     console.log("Successfully retrieved Telegram API credentials");
     
-    // Return the credentials
-    return new Response(
-      JSON.stringify({ 
-        apiId,
-        apiHash
-      }),
-      { 
-        status: 200, 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
-    );
-
+    // Return the API credentials
+    return createResponse({
+      apiId,
+      apiHash
+    });
+    
   } catch (error) {
-    console.error("Error in get-telegram-credentials function:", error);
-    return new Response(
-      JSON.stringify({ 
-        error: error.message || "An unknown error occurred",
-        details: "Unhandled exception in edge function"
-      }),
-      { 
-        status: 500, 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
-    );
+    console.error("Unhandled error:", error);
+    return createErrorResponse(`Server error: ${error.message}`, 500);
   }
 });
