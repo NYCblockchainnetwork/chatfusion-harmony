@@ -18,9 +18,14 @@ export async function handleQrLogin(supabase: any, userId: string) {
     
     console.log("Using API ID:", apiId);
     
-    // Create a random token - this will be our login token
-    // According to Telegram docs, this should be a randomly generated token
-    const token = crypto.randomUUID();
+    // Generate a random token according to Telegram specs
+    // In a production environment, this would be obtained by calling auth.exportLoginToken
+    // but for our simulation we'll generate a random token
+    const randomBytes = new Uint8Array(32);
+    crypto.getRandomValues(randomBytes);
+    const token = Array.from(randomBytes)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
     
     // Store the token in the database with status pending
     const { error } = await supabase
@@ -29,7 +34,7 @@ export async function handleQrLogin(supabase: any, userId: string) {
         user_id: userId,
         token,
         status: "pending",
-        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutes expiry
+        expires_at: new Date(Date.now() + 30 * 1000).toISOString(), // 30 seconds expiry (as per Telegram docs)
       });
     
     if (error) {
@@ -37,17 +42,22 @@ export async function handleQrLogin(supabase: any, userId: string) {
       throw new Error("Failed to store QR login token");
     }
     
-    // Generate a QR login URL
-    // Format: tg://login?token=<TOKEN>
-    // This is the correct URL format for Telegram QR login
-    const qrUrl = `tg://login?token=${encodeURIComponent(token)}`;
+    // Generate a QR login URL according to Telegram specs
+    // Format: tg://login?token=<base64url-encoded-token>
+    const tokenBytes = new TextEncoder().encode(token);
+    const base64Token = btoa(String.fromCharCode(...tokenBytes))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+    
+    const qrUrl = `tg://login?token=${base64Token}`;
     
     console.log("Generated QR URL:", qrUrl);
     
     return {
       token,
       qrUrl,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      expiresAt: new Date(Date.now() + 30 * 1000).toISOString(), // 30 seconds expiry
     };
   } catch (error) {
     console.error("Error in handleQrLogin:", error);
@@ -75,27 +85,23 @@ export async function processQrCodeLogin(supabase: any, userId: string, token: s
       return { success: false, expired: true };
     }
     
-    // In a real implementation, we would check if the token was scanned
-    // by the Telegram mobile app. For simulation purposes, we'll randomly
-    // determine if login was successful
+    // In a real implementation, we would implement the full Telegram QR login flow:
+    // 1. The QR code with tg://login?token=<token> is shown to the user
+    // 2. User scans it with their Telegram app
+    // 3. Telegram app calls auth.acceptLoginToken with the token
+    // 4. This triggers an updateLoginToken update on our end
+    // 5. We would call auth.importLoginToken to complete the login
+    // 6. This returns a auth.LoginTokenSuccess with the authorization
     
-    // In a real implementation:
-    // 1. Mobile device scans the QR code, gets the token
-    // 2. Mobile sends the token to Telegram servers
-    // 3. Telegram servers validate and create a login session
-    // 4. Our server would poll Telegram servers or receive a webhook about login status
+    // For simulation, we'll check if the token is about to expire and
+    // simulate a successful login with 80% probability
+    const tokenAge = new Date().getTime() - new Date(tokenData.created_at).getTime();
+    const shouldSucceed = Math.random() > 0.2; // 80% chance of success
     
-    // Simulate a successful login after some time
-    // In production, this would check with Telegram API for confirmation
-    const shouldSucceed = Math.random() > 0.2; // 80% chance of success on each check
-    
-    if (shouldSucceed) {
+    if (shouldSucceed && tokenAge > 3000) { // Wait at least 3 seconds before success
       // Get Telegram API credentials
       const apiId = parseInt(Deno.env.get("telegram_api_id") || "0", 10);
       const apiHash = Deno.env.get("telegram_api_hash") || "";
-      
-      // Simulate creating a session
-      const stringSession = new StringSession("");
       
       // Create a session ID
       const sessionId = crypto.randomUUID();
@@ -103,8 +109,15 @@ export async function processQrCodeLogin(supabase: any, userId: string, token: s
       // Mark the token as used
       await supabase
         .from("qr_login_states")
-        .update({ status: "used" })
+        .update({ 
+          status: "used",
+          session_id: sessionId
+        })
         .eq("token", token);
+      
+      // In a real implementation, we would get a real session string from Telegram
+      // Create a mock session
+      const stringSession = new StringSession("");
       
       // Store the session in the database
       const { error: sessionError } = await supabase
@@ -112,10 +125,8 @@ export async function processQrCodeLogin(supabase: any, userId: string, token: s
         .insert({
           id: sessionId,
           user_id: userId,
-          api_id: apiId,
-          api_hash: apiHash,
-          session_string: stringSession.save(), // This would be a real session string in production
-          auth_method: "qr",
+          phone: "QR Login", // Mark that this session was created via QR
+          session_string: stringSession.save(),
         });
       
       if (sessionError) {

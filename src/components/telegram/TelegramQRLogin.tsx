@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { initializedTelegramClient } from '@/utils/initTelegramClient';
 import { Button } from '@/components/ui/button';
@@ -28,17 +28,29 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
     generateQrCode();
   }, []);
 
+  // Auto-refresh QR code every 30 seconds (Telegram tokens expire in 30s)
+  useEffect(() => {
+    if (!qrLink) return;
+    
+    const refreshTimer = setTimeout(() => {
+      console.log("QR code expired, refreshing...");
+      generateQrCode();
+    }, 30000); // 30 seconds
+    
+    return () => clearTimeout(refreshTimer);
+  }, [qrLink]);
+
   // Check status every 3 seconds if we have a token
   useEffect(() => {
-    if (!token || statusCheckCount >= 30) return; // limit to 30 checks (90 seconds)
-
+    if (!token) return; 
+    
     const intervalId = setInterval(() => {
       checkQrCodeStatus();
       setStatusCheckCount(prev => prev + 1);
     }, 3000);
 
     return () => clearInterval(intervalId);
-  }, [token, statusCheckCount]);
+  }, [token]);
 
   const generateQrCode = async () => {
     if (!user?.id) {
@@ -82,7 +94,7 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
     }
   };
 
-  const checkQrCodeStatus = async () => {
+  const checkQrCodeStatus = useCallback(async () => {
     if (!user?.id || !token) return;
     
     try {
@@ -104,15 +116,15 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
         });
       } else if (result.expired) {
         // If the token has expired
-        setErrorMessage("QR code has expired. Please refresh.");
-        setToken(null);
-        setQrLink(null);
+        console.log("QR code expired, refreshing...");
+        setErrorMessage("QR code has expired. Refreshing...");
+        generateQrCode();
       }
     } catch (error) {
       console.error("Error checking QR code status:", error);
       
       // Only show error toast on first error
-      if (statusCheckCount === 0) {
+      if (statusCheckCount <= 1) {
         toast({
           title: "Status Check Failed",
           description: error.message || "Failed to check QR code status",
@@ -120,7 +132,7 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
         });
       }
     }
-  };
+  }, [user?.id, token, statusCheckCount, onSuccess]);
 
   const handleRefresh = () => {
     generateQrCode();
