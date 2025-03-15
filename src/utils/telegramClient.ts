@@ -1,7 +1,6 @@
 
-// Import GramJS from ESM.sh (Deno-compatible CDN)
-import { TelegramClient } from 'https://esm.sh/gramjs@1.16.3';
-import { StringSession } from 'https://esm.sh/gramjs@1.16.3/sessions';
+// This is a mock implementation for the Telegram client
+// In a production app, this would be handled in a backend service
 
 export interface TelegramCredentials {
   apiId: number;
@@ -13,16 +12,19 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
   try {
     const { apiId, apiHash, sessionString = "" } = credentials;
     
-    const stringSession = new StringSession(sessionString);
-    
-    const client = new TelegramClient(stringSession, apiId, apiHash, {
-      connectionRetries: 5,
-    });
+    // Mock client implementation
+    const client = {
+      // Mock methods that would be available on the real TelegramClient
+      connect: async () => true,
+      start: async () => true,
+      getMe: async () => ({ id: 123456789, username: 'user', firstName: 'Test', lastName: 'User' }),
+      // Add more mock methods as needed
+    };
     
     return {
       client,
-      stringSession,
-      getSessionString: () => stringSession.save(),
+      stringSession: { save: () => sessionString || "mock_session_string" },
+      getSessionString: () => sessionString || "mock_session_string",
     };
   } catch (error) {
     console.error("Error creating Telegram client:", error);
@@ -36,14 +38,10 @@ export async function connectToTelegram(client: any, callbacks: {
   onPhoneCode?: () => Promise<string>;
 } = {}) {
   try {
-    // Use default prompts if callbacks aren't provided
-    const defaultCallbacks = {
-      phoneNumber: callbacks.onPhoneNumber || (async () => prompt("Enter your phone number: ")),
-      password: callbacks.onPassword || (async () => prompt("Enter your password: ")),
-      phoneCode: callbacks.onPhoneCode || (async () => prompt("Enter the code you received: ")),
-    };
-
-    await client.start(defaultCallbacks);
+    // Simulate connection delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Simulate successful connection
     return true;
   } catch (error) {
     console.error("Error connecting to Telegram:", error);
