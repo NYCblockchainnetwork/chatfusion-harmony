@@ -69,54 +69,69 @@ async function fetchRealTelegramMessages(
     
     console.log("Telegram client created, connecting...");
     
-    // Connect to Telegram
-    await client.connect();
-    console.log("Connected to Telegram API");
-    
-    // Get the session string for future use
-    const newSessionString = stringSession.save();
-    console.log("Session string saved");
-    
-    // Process each handle
-    for (const handle of handles) {
-      const cleanHandle = handle.startsWith('@') ? handle.substring(1) : handle;
+    try {
+      // Connect to Telegram
+      await client.connect();
+      console.log("Connected to Telegram API");
       
-      try {
-        console.log(`Fetching messages for @${cleanHandle}`);
+      // Get the session string for future use
+      const newSessionString = stringSession.save();
+      console.log("Session string saved");
+      
+      // Process each handle
+      for (const handle of handles) {
+        const cleanHandle = handle.startsWith('@') ? handle.substring(1) : handle;
         
-        // Get the entity (user/chat)
-        const entity = await client.getEntity(`@${cleanHandle}`);
-        console.log(`Entity found for @${cleanHandle}`);
-        
-        // Get messages
-        const messages = await client.getMessages(entity, { limit });
-        console.log(`Retrieved ${messages.length} messages for @${cleanHandle}`);
-        
-        // Transform messages to our format
-        result[cleanHandle] = messages.map((msg: any) => ({
-          id: msg.id,
-          text: msg.message || "(No text content)",
-          date: msg.date,
-          from: {
-            username: cleanHandle,
-            firstName: entity.firstName || "User",
-            lastName: entity.lastName
-          }
-        }));
-      } catch (error) {
-        console.error(`Error fetching messages for @${cleanHandle}:`, error);
-        result[cleanHandle] = [createErrorMessage(cleanHandle, error.message)];
+        try {
+          console.log(`Fetching messages for @${cleanHandle}`);
+          
+          // Get the entity (user/chat)
+          const entity = await client.getEntity(`@${cleanHandle}`);
+          console.log(`Entity found for @${cleanHandle}`);
+          
+          // Get messages
+          const messages = await client.getMessages(entity, { limit });
+          console.log(`Retrieved ${messages.length} messages for @${cleanHandle}`);
+          
+          // Transform messages to our format
+          result[cleanHandle] = messages.map((msg: any) => ({
+            id: msg.id,
+            text: msg.message || "(No text content)",
+            date: msg.date,
+            from: {
+              username: cleanHandle,
+              firstName: entity.firstName || "User",
+              lastName: entity.lastName
+            }
+          }));
+        } catch (error) {
+          console.error(`Error fetching messages for @${cleanHandle}:`, error);
+          result[cleanHandle] = [createErrorMessage(cleanHandle, error.message)];
+        }
       }
+      
+      // Disconnect client
+      await client.disconnect();
+      console.log("Disconnected from Telegram API");
+      
+      return { result, newSessionString };
+    } catch (connectionError) {
+      // Check for session expiration errors
+      if (
+        connectionError.message.includes("AUTH_KEY_UNREGISTERED") || 
+        connectionError.message.includes("SESSION_EXPIRED") ||
+        connectionError.message.includes("AUTH_KEY_INVALID")
+      ) {
+        console.error("Telegram session has expired:", connectionError.message);
+        throw new Error("TELEGRAM_SESSION_EXPIRED");
+      }
+      
+      // Rethrow other connection errors
+      throw connectionError;
     }
-    
-    // Disconnect client
-    await client.disconnect();
-    console.log("Disconnected from Telegram API");
-    
-    return { result, newSessionString };
   } catch (error) {
     console.error("Error importing or using grm library:", error);
-    throw new Error(`Failed to use Telegram client: ${error.message}`);
+    throw error;
   }
 }
 
@@ -162,13 +177,27 @@ serve(async (req) => {
 
   try {
     console.log("Received request to fetch-telegram-messages");
-    const body = await req.json();
-    console.log("Request body:", JSON.stringify(body));
+    let body;
+    
+    try {
+      body = await req.json();
+      console.log("Request body:", JSON.stringify(body));
+    } catch (parseError) {
+      console.error("Failed to parse request body:", parseError);
+      return new Response(
+        JSON.stringify({ 
+          error: "Invalid request body format",
+          details: parseError.message
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     const { handles, limit = 5, apiId, apiHash, userId, sessionId, phone } = body as TelegramRequest;
     
     // Validate inputs
     if (!handles || !Array.isArray(handles) || handles.length === 0) {
+      console.error("Invalid or missing handles in request:", body);
       return new Response(
         JSON.stringify({ error: "At least one Telegram handle is required" }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -176,6 +205,7 @@ serve(async (req) => {
     }
 
     if (!userId) {
+      console.error("Missing userId in request:", body);
       return new Response(
         JSON.stringify({ error: "User ID is required" }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -187,7 +217,7 @@ serve(async (req) => {
     const apiHashToUse = apiHash || Deno.env.get("telegram_api_hash");
     
     if (!apiIdToUse || !apiHashToUse) {
-      console.error("Missing Telegram API credentials");
+      console.error("Missing Telegram API credentials. apiId:", apiIdToUse, "apiHash exists:", !!apiHashToUse);
       return new Response(
         JSON.stringify({ 
           error: "Telegram API credentials not found",
@@ -214,12 +244,32 @@ serve(async (req) => {
       sessionQuery = sessionQuery.eq('phone', phone);
     }
     
-    const { data: sessionData, error: sessionError } = await sessionQuery.limit(1).single();
+    const { data: sessionData, error: sessionError } = await sessionQuery.maybeSingle();
     
-    console.log("Session query result:", JSON.stringify({ sessionData, sessionError }));
+    console.log("Session query result:", JSON.stringify({ 
+      found: !!sessionData, 
+      error: sessionError ? sessionError.message : null,
+      sessionId: sessionData?.id,
+      phone: sessionData?.phone
+    }));
     
-    if (sessionError || !sessionData) {
-      console.error("Failed to fetch session from database:", sessionError);
+    if (sessionError) {
+      console.error("Database error fetching session:", sessionError);
+      
+      // If we couldn't query the database, return a proper error
+      return new Response(
+        JSON.stringify({ 
+          error: "Database error fetching session: " + sessionError.message,
+          needsAuth: true,
+          mode: "error",
+          details: sessionError.message
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    if (!sessionData) {
+      console.log("No session found for user:", userId);
       
       // If we couldn't find a session, return mock data as fallback
       const mockMessages = createMockMessages(handles);
@@ -230,7 +280,7 @@ serve(async (req) => {
           error: "Telegram session not found, authentication required",
           needsAuth: true,
           mode: "mock",
-          details: sessionError ? sessionError.message : "No session found for this user"
+          details: "No active session found for this user. Please authenticate with Telegram."
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -253,12 +303,15 @@ serve(async (req) => {
       
       console.log("Successfully fetched real messages from Telegram API");
       
-      // If the session string has changed, update it in the database
-      if (newSessionString !== sessionString) {
-        console.log("Updating session in database");
+      // Always update the session string to ensure it's current
+      if (newSessionString && newSessionString !== sessionString) {
+        console.log("Updating session string in database");
         const { error: updateError } = await supabase
           .from('telegram_sessions')
-          .update({ session_string: newSessionString })
+          .update({ 
+            session_string: newSessionString,
+            updated_at: new Date().toISOString()
+          })
           .eq('id', sessionData.id);
         
         if (updateError) {
@@ -280,9 +333,41 @@ serve(async (req) => {
       );
       
     } catch (telegramError) {
-      console.error("Failed to fetch real messages:", telegramError.message);
+      console.error("Error fetching real messages:", telegramError);
       
-      // Create mock data as fallback
+      // Handle expired/invalid sessions specifically
+      if (telegramError.message === "TELEGRAM_SESSION_EXPIRED" || 
+          telegramError.message.includes("AUTH_KEY_UNREGISTERED") ||
+          telegramError.message.includes("AUTH_KEY_INVALID") ||
+          telegramError.message.includes("SESSION_EXPIRED")) {
+        
+        console.log("Detected expired session, marking for re-authentication");
+        
+        // Mark the session as invalid in the database
+        const { error: updateError } = await supabase
+          .from('telegram_sessions')
+          .update({ 
+            session_string: "EXPIRED",
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', sessionData.id);
+        
+        if (updateError) {
+          console.error("Failed to mark session as expired:", updateError);
+        }
+        
+        return new Response(
+          JSON.stringify({ 
+            error: "Your Telegram session has expired. Please re-authenticate.",
+            needsAuth: true,
+            mode: "expired",
+            sessionExpired: true
+          }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Create mock data as fallback for other errors
       const mockMessages = createMockMessages(handles);
       
       return new Response(
@@ -291,19 +376,20 @@ serve(async (req) => {
           error: `Telegram API Error: ${telegramError.message}`,
           needsAuth: telegramError.message.includes("auth") || telegramError.message.includes("session"),
           mode: "mock",
-          details: "Using mock data as fallback due to Telegram API error"
+          details: "Using mock data as fallback due to Telegram API error: " + telegramError.message
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
   } catch (error) {
-    console.error("Error in fetch-telegram-messages function:", error);
+    console.error("Unhandled error in fetch-telegram-messages function:", error);
     return new Response(
       JSON.stringify({ 
         error: error.message || "An unknown error occurred",
-        mode: "mock",
-        messages: {} 
+        mode: "error",
+        messages: {},
+        details: "Unhandled exception in edge function"
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

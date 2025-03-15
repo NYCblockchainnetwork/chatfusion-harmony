@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -7,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
+
 const Login = () => {
   const {
     loginWithGoogle,
@@ -16,6 +18,7 @@ const Login = () => {
   const navigate = useNavigate();
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const [loginAttempted, setLoginAttempted] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -38,15 +41,20 @@ const Login = () => {
       googleButtonRef.current.appendChild(container);
     }
   }, []);
+  
   const handleGoogleLogin = async () => {
     try {
       setLoginAttempted(true);
+      setAuthError(null);
+      
       await loginWithGoogle();
       console.log("Login initiated via Google");
       // The actual login happens via the callback in AuthContext
     } catch (error: any) {
       console.error('Login error:', error);
       setLoginAttempted(false);
+      setAuthError(error.message || "Authentication failed");
+      
       toast({
         title: "Login failed",
         description: error.message || "Could not log in with Google. Please try again.",
@@ -58,7 +66,9 @@ const Login = () => {
   // Check if Google Client ID is set
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const isGoogleConfigMissing = !googleClientId;
-  return <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+  
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Welcome</CardTitle>
@@ -68,17 +78,33 @@ const Login = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {isGoogleConfigMissing && <Alert variant="destructive">
+            {isGoogleConfigMissing && (
+              <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
                   Google Client ID not found. Add VITE_GOOGLE_CLIENT_ID to your .env file to enable Google login.
                 </AlertDescription>
-              </Alert>}
+              </Alert>
+            )}
             
-            {isLoading && loginAttempted ? <div className="py-4 flex flex-col items-center space-y-4">
+            {authError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{authError}</AlertDescription>
+              </Alert>
+            )}
+            
+            {isLoading && loginAttempted ? (
+              <div className="py-4 flex flex-col items-center space-y-4">
                 <Progress value={75} className="w-full h-2" />
                 <p className="text-sm text-gray-500">Signing in with Google...</p>
-              </div> : <Button className="w-full flex items-center justify-center gap-2" onClick={handleGoogleLogin} disabled={isLoading || isGoogleConfigMissing}>
+              </div>
+            ) : (
+              <Button 
+                className="w-full flex items-center justify-center gap-2" 
+                onClick={handleGoogleLogin} 
+                disabled={isLoading || isGoogleConfigMissing}
+              >
                 <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24" className="h-5 w-5">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                   <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
@@ -87,7 +113,8 @@ const Login = () => {
                   <path d="M1 1h22v22H1z" fill="none" />
                 </svg>
                 {isLoading ? "Processing..." : "Sign in with Google"}
-              </Button>}
+              </Button>
+            )}
             
             <div ref={googleButtonRef} className="mt-4 flex justify-center"></div>
           </div>
@@ -96,6 +123,8 @@ const Login = () => {
           <p className="text-xs text-gray-500">Application settings and user preferences will be securely stored.</p>
         </CardFooter>
       </Card>
-    </div>;
+    </div>
+  );
 };
+
 export default Login;
