@@ -1,42 +1,23 @@
 
-import React, { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import ErrorDisplay from "./ErrorDisplay";
-import PhoneNumberInput from "./PhoneNumberInput";
-import VerificationCodeInput from "./VerificationCodeInput";
-import LoadingState from "./LoadingState";
-import ErrorState from "./ErrorState";
-import TelegramQRLogin from "./TelegramQRLogin";
-import { useTelegramVerification } from "@/hooks/useTelegramVerification";
-import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "@/hooks/use-toast";
+import React, { useState, useEffect } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import PhoneNumberInput from './PhoneNumberInput';
+import VerificationCodeInput from './VerificationCodeInput';
+import ErrorDisplay from './ErrorDisplay';
+import { useTelegramVerification } from '@/hooks/useTelegramVerification';
+import TelegramQRLogin from './TelegramQRLogin';
 
 interface TelegramPhoneVerificationProps {
   onSuccess: (sessionId: string, phone?: string) => void;
   onCancel: () => void;
 }
 
-const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({ 
+const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
   onSuccess,
   onCancel
 }) => {
-  const { isAuthenticated, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"qr" | "phone">("qr"); // Default to QR authentication
-  
-  console.log("TelegramPhoneVerification rendered, activeTab:", activeTab);
-  
-  useEffect(() => {
-    if (!isAuthenticated) {
-      toast({
-        title: "Authentication Required",
-        description: "You must be logged in to use Telegram integration. Please log in and try again.",
-        variant: "destructive"
-      });
-    }
-  }, [isAuthenticated]);
+  const [tabValue, setTabValue] = useState<string>("qr");
   
   const {
     phone,
@@ -51,108 +32,83 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
     verifyCode,
     goBackToPhone
   } = useTelegramVerification({ onSuccess });
-  
-  if (!isAuthenticated || !user) {
-    return (
-      <ErrorState 
-        error="You must be logged in to use Telegram integration. Please log in and try again." 
-        onCancel={onCancel} 
-      />
-    );
-  }
-  
-  if (isLoading && !hasLoadedCredentials) {
-    return <LoadingState />;
-  }
-  
-  if (error && !hasLoadedCredentials) {
-    return <ErrorState error={error} onCancel={onCancel} />;
-  }
 
-  const handleQRSuccess = (sessionId: string) => {
-    console.log("QR authentication successful, sessionId:", sessionId);
+  // Set debug console log for mounting
+  useEffect(() => {
+    console.log("TelegramPhoneVerification mounted, default tab:", tabValue);
+  }, []);
+
+  const handleTabChange = (value: string) => {
+    console.log("Tab changed to:", value);
+    setTabValue(value);
+  };
+
+  const handleQRLoginSuccess = (sessionId: string) => {
+    console.log("QR login successful, sessionId:", sessionId);
     onSuccess(sessionId);
   };
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Connect to Telegram</CardTitle>
-        <CardDescription>
-          Connect your Telegram account to receive and process messages
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "qr" | "phone")}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="qr">QR Code</TabsTrigger>
-            <TabsTrigger value="phone">Phone Number</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="qr" className="mt-4">
-            <TelegramQRLogin 
-              onSuccess={handleQRSuccess} 
-              onCancel={onCancel} 
-            />
-          </TabsContent>
-          
-          <TabsContent value="phone" className="mt-4">
-            <ErrorDisplay error={error} />
-            
-            {step === "phone" ? (
+    <div className="space-y-6">
+      <h3 className="text-lg font-medium">Connect to Telegram</h3>
+      
+      <Tabs defaultValue="qr" onValueChange={handleTabChange} value={tabValue}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="qr">QR Code Login</TabsTrigger>
+          <TabsTrigger value="phone">Phone Login</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="qr" className="space-y-4">
+          <TelegramQRLogin onSuccess={handleQRLoginSuccess} onError={(err) => console.error("QR Login error:", err)} />
+        </TabsContent>
+        
+        <TabsContent value="phone" className="space-y-4">
+          {step === "phone" ? (
+            <div className="space-y-4">
               <PhoneNumberInput 
-                phone={phone} 
+                value={phone} 
                 onChange={handlePhoneChange} 
-                disabled={isLoading} 
+                disabled={isLoading}
               />
-            ) : (
-              <VerificationCodeInput 
-                code={code} 
-                phone={phone} 
-                onChange={handleCodeChange} 
-                disabled={isLoading} 
-              />
-            )}
-            
-            <div className="flex justify-between mt-4">
-              {step === "phone" ? (
-                <>
-                  <Button variant="outline" onClick={onCancel} disabled={isLoading}>
-                    Cancel
-                  </Button>
-                  <Button onClick={sendVerificationCode} disabled={isLoading || !phone}>
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      "Send Code"
-                    )}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button variant="outline" onClick={goBackToPhone} disabled={isLoading}>
-                    Back
-                  </Button>
-                  <Button onClick={verifyCode} disabled={isLoading || !code}>
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Verifying...
-                      </>
-                    ) : (
-                      "Verify"
-                    )}
-                  </Button>
-                </>
-              )}
+              
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={onCancel}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={sendVerificationCode} 
+                  disabled={isLoading || !hasLoadedCredentials}
+                >
+                  {isLoading ? "Sending..." : "Send Code"}
+                </Button>
+              </div>
             </div>
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
+          ) : (
+            <div className="space-y-4">
+              <VerificationCodeInput 
+                value={code} 
+                onChange={handleCodeChange} 
+                disabled={isLoading}
+              />
+              
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={goBackToPhone}>
+                  Back
+                </Button>
+                <Button 
+                  onClick={verifyCode} 
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Verifying..." : "Verify Code"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+      
+      <ErrorDisplay error={error} />
+    </div>
   );
 };
 

@@ -1,82 +1,84 @@
 
+import { telegramClient } from "@/integrations/supabase/client";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
 
-// These methods can be used to extend the telegramClient object 
-export const getQRLoginToken = async (userId: string) => {
-  try {
-    console.log("Getting QR login token for user", userId);
-    const response = await supabase.functions.invoke('telegram-auth', {
-      body: { 
-        method: 'get-qr-token',
-        userId 
-      }
-    });
-    
-    console.log("QR token response:", response);
-    
-    if (response.error) {
-      throw new Error(response.error.message || "Failed to get QR login token");
-    }
-    
-    if (!response.data || !response.data.token || !response.data.qrUrl) {
-      console.error("Invalid response from QR token endpoint:", response.data);
-      throw new Error("Invalid response from QR login endpoint");
-    }
-    
-    return {
-      token: response.data.token,
-      qrUrl: response.data.qrUrl,
-      expiresAt: response.data.expiresAt
-    };
-  } catch (error) {
-    console.error("Error getting QR login token:", error);
-    toast({
-      title: "Error",
-      description: error.message || "Failed to get QR login token",
-      variant: "destructive" 
-    });
-    throw error;
-  }
-};
-
-export const checkQRLoginStatus = async (userId: string, token: string) => {
-  try {
-    console.log("Checking QR login status for user", userId);
-    const response = await supabase.functions.invoke('telegram-auth', {
-      body: { 
-        method: 'check-qr-status',
-        userId,
-        token
-      }
-    });
-    
-    console.log("QR status response:", response);
-    
-    if (response.error) {
-      throw new Error(response.error.message || "Failed to check QR login status");
-    }
-    
-    return {
-      success: response.data?.success || false,
-      expired: response.data?.expired || false,
-      sessionId: response.data?.sessionId || null
-    };
-  } catch (error) {
-    console.error("Error checking QR login status:", error);
-    throw error;
-  }
-};
-
-// Apply the helper functions to the telegramClient object
-export const extendTelegramClient = (client: any) => {
-  if (!client.getQRLoginToken) {
-    client.getQRLoginToken = getQRLoginToken;
-  }
+export function extendTelegramClient(client: any) {
+  console.log("Extending telegramClient with QR login methods");
   
-  if (!client.checkQRLoginStatus) {
-    client.checkQRLoginStatus = checkQRLoginStatus;
-  }
+  // Add QR login methods
+  client.getQRLoginToken = async (userId: string) => {
+    console.log("Getting QR login token for user:", userId);
+    
+    try {
+      // Get auth headers
+      const headers = await client.getAuthHeaders();
+      
+      // Call the telegram-auth function with the get-qr-token method
+      const { data, error } = await supabase.functions.invoke('telegram-auth', {
+        body: { 
+          method: "get-qr-token",
+          userId 
+        },
+        headers
+      });
+      
+      if (error) {
+        console.error("Error calling telegram-auth function:", error);
+        throw new Error(`Failed to get QR login token: ${error.message}`);
+      }
+      
+      if (!data || data.error) {
+        console.error("Error response from telegram-auth function:", data);
+        throw new Error(data?.error || "Failed to get QR login token");
+      }
+      
+      console.log("Successfully got QR login token:", data);
+      return data;
+    } catch (error) {
+      console.error("Error in getQRLoginToken:", error);
+      throw error;
+    }
+  };
+  
+  client.checkQRLoginStatus = async (userId: string, token: string) => {
+    console.log("Checking QR login status for user:", userId, "token:", token);
+    
+    try {
+      // Get auth headers
+      const headers = await client.getAuthHeaders();
+      
+      // Call the telegram-auth function with the check-qr-status method
+      const { data, error } = await supabase.functions.invoke('telegram-auth', {
+        body: { 
+          method: "check-qr-status",
+          userId,
+          token
+        },
+        headers
+      });
+      
+      if (error) {
+        console.error("Error calling telegram-auth function:", error);
+        throw new Error(`Failed to check QR login status: ${error.message}`);
+      }
+      
+      if (!data) {
+        console.error("Empty response from telegram-auth function");
+        throw new Error("Failed to check QR login status");
+      }
+      
+      if (data.error) {
+        console.error("Error response from telegram-auth function:", data);
+        throw new Error(data.error);
+      }
+      
+      console.log("QR login status:", data);
+      return data;
+    } catch (error) {
+      console.error("Error in checkQRLoginStatus:", error);
+      throw error;
+    }
+  };
   
   return client;
-};
+}

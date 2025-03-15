@@ -16,8 +16,10 @@ serve(async (req) => {
   try {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const body = await req.json();
-    const { method, userId, token, phone, code, phoneCodeHash } = body;
+    const { userId, token, method } = body;
 
+    console.log("Telegram Auth function called with method:", method);
+    
     // Create response with CORS headers
     const createResponse = (data: any, status = 200) => {
       return new Response(JSON.stringify(data), {
@@ -46,9 +48,8 @@ serve(async (req) => {
         const status = await processQrCodeLogin(supabase, userId, token);
         return createResponse(status);
       
-      // Add other methods as needed (send-code, verify-code, etc.)
-        
       default:
+        console.log("Invalid method:", method);
         return createResponse({ error: "Invalid method" }, 400);
     }
   } catch (error) {

@@ -1,181 +1,164 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, RefreshCw } from "lucide-react";
-import QRCode from "react-qr-code";
-import { telegramClient } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "@/hooks/use-toast";
-import ErrorDisplay from "./ErrorDisplay";
-import { initializedTelegramClient } from "@/utils/initTelegramClient";
+
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { initializedTelegramClient } from '@/utils/initTelegramClient';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { toast } from '@/hooks/use-toast';
+import QRCode from 'react-qr-code';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle, RefreshCw } from 'lucide-react';
+import LoadingState from './LoadingState';
 
 interface TelegramQRLoginProps {
   onSuccess: (sessionId: string) => void;
-  onCancel: () => void;
+  onError?: (error: Error) => void;
 }
 
-const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ 
-  onSuccess,
-  onCancel
-}) => {
+const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError }) => {
+  const [qrLink, setQrLink] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [statusCheckCount, setStatusCheckCount] = useState(0);
   const { user } = useAuth();
-  const [qrToken, setQrToken] = useState<string | null>(null);
-  const [qrUrl, setQrUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isPolling, setIsPolling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pollCount, setPollCount] = useState(0);
-  
-  console.log("TelegramQRLogin rendered");
-  
-  // Generate a new QR code token
-  const generateQRToken = useCallback(async () => {
-    if (!user?.id) return;
-    
-    setIsLoading(true);
-    setError(null);
-    
+
+  // Generate QR code on component mount
+  useEffect(() => {
+    generateQrCode();
+  }, []);
+
+  // Check status every 3 seconds if we have a token
+  useEffect(() => {
+    if (!token || statusCheckCount >= 30) return; // limit to 30 checks (90 seconds)
+
+    const intervalId = setInterval(() => {
+      checkQrCodeStatus();
+      setStatusCheckCount(prev => prev + 1);
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [token, statusCheckCount]);
+
+  const generateQrCode = async () => {
+    if (!user?.id) {
+      setErrorMessage("User authentication required");
+      return;
+    }
+
+    setIsGenerating(true);
+    setErrorMessage(null);
+    setStatusCheckCount(0);
+
     try {
-      console.log("Generating QR login token...");
-      const client = initializedTelegramClient || telegramClient;
-      const result = await client.getQRLoginToken(user.id);
+      console.log("Generating QR code for user:", user.id);
       
-      if (!result || !result.token) {
-        throw new Error("Failed to generate QR login token");
+      const result = await initializedTelegramClient.getQRLoginToken(user.id);
+      
+      console.log("QR token result:", result);
+      
+      if (!result || !result.token || !result.link) {
+        throw new Error("Failed to generate QR code token");
       }
       
-      console.log("QR token generated successfully:", result);
-      setQrToken(result.token);
-      setQrUrl(result.qrUrl);
-      setIsPolling(true);
-      setPollCount(0);
-    } catch (err: any) {
-      console.error("Error generating QR login token:", err);
-      setError(`Error: ${err.message}`);
+      setQrLink(result.link);
+      setToken(result.token);
+      
+      console.log("QR code generated successfully");
+    } catch (error) {
+      console.error("Error generating QR code:", error);
+      setErrorMessage(error.message || "Failed to generate QR code");
+      if (onError) onError(error instanceof Error ? error : new Error(String(error)));
+      
       toast({
-        title: "Error",
-        description: err.message || "Failed to generate QR code",
+        title: "QR Code Generation Failed",
+        description: error.message || "Failed to generate QR code",
         variant: "destructive"
       });
     } finally {
-      setIsLoading(false);
+      setIsGenerating(false);
     }
-  }, [user?.id]);
-  
-  // Check QR login status periodically
-  useEffect(() => {
-    let intervalId: number | null = null;
+  };
+
+  const checkQrCodeStatus = async () => {
+    if (!user?.id || !token) return;
     
-    if (isPolling && qrToken && user?.id) {
-      intervalId = window.setInterval(async () => {
-        try {
-          // Increment poll count for timeout calculation
-          setPollCount(count => count + 1);
-          
-          console.log(`Checking QR login status (attempt ${pollCount + 1})...`);
-          const client = initializedTelegramClient || telegramClient;
-          const result = await client.checkQRLoginStatus(user.id, qrToken);
-          
-          console.log("QR login status:", result);
-          
-          // If QR code is scanned and accepted successfully
-          if (result.success && result.sessionId) {
-            clearInterval(intervalId!);
-            setIsPolling(false);
-            
-            toast({
-              title: "Authentication Successful",
-              description: "Your Telegram account has been connected",
-            });
-            
-            onSuccess(result.sessionId);
-          }
-          
-          // If QR code is expired or invalid
-          if (result.expired || pollCount > 60) { // 2 minutes timeout (polling every 2 seconds)
-            clearInterval(intervalId!);
-            setIsPolling(false);
-            setError("QR code has expired. Please generate a new one.");
-          }
-        } catch (err: any) {
-          console.error("Error checking QR login status:", err);
-          
-          // Don't stop polling on error, it might be a temporary issue
-          // Just log the error and continue
-          console.log(`Polling error: ${err.message}`);
-          
-          // If we get consistent errors, stop polling after a few attempts
-          if (pollCount > 10) {
-            clearInterval(intervalId!);
-            setIsPolling(false);
-            setError(`Error checking QR login status: ${err.message}`);
-          }
-        }
-      }, 2000); // Check every 2 seconds
-    }
-    
-    return () => {
-      if (intervalId !== null) {
-        clearInterval(intervalId);
+    try {
+      console.log("Checking QR code status for token:", token);
+      
+      const result = await initializedTelegramClient.checkQRLoginStatus(user.id, token);
+      
+      console.log("QR status check result:", result);
+      
+      if (result.status === "confirmed") {
+        console.log("QR code login confirmed with sessionId:", result.sessionId);
+        onSuccess(result.sessionId);
+        
+        toast({
+          title: "Telegram Connected",
+          description: "Successfully connected via QR code",
+        });
       }
-    };
-  }, [isPolling, qrToken, user?.id, pollCount, onSuccess]);
-  
-  // Generate QR token on component mount
-  useEffect(() => {
-    console.log("TelegramQRLogin - Calling generateQRToken on mount");
-    generateQRToken();
-  }, [generateQRToken]);
-  
+    } catch (error) {
+      console.error("Error checking QR code status:", error);
+      
+      // Only show error toast on first error
+      if (statusCheckCount === 0) {
+        toast({
+          title: "Status Check Failed",
+          description: error.message || "Failed to check QR code status",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const handleRefresh = () => {
+    generateQrCode();
+  };
+
+  if (isGenerating) {
+    return <LoadingState message="Generating QR code..." />;
+  }
+
   return (
-    <div className="flex flex-col items-center space-y-4">
-      <ErrorDisplay error={error} />
-      
-      {isLoading ? (
-        <div className="flex flex-col items-center p-6 space-y-3">
-          <Loader2 className="w-10 h-10 animate-spin text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Generating QR code...</p>
-        </div>
-      ) : qrUrl ? (
-        <Card className="border-2 p-1">
-          <CardContent className="p-4">
-            <QRCode
-              value={qrUrl}
-              size={200}
-              style={{ height: "auto", maxWidth: "100%", width: "100%" }}
-              viewBox={`0 0 256 256`}
-            />
-          </CardContent>
-        </Card>
-      ) : null}
-      
-      <div className="text-center space-y-2">
-        <h3 className="text-base font-medium">Scan with Telegram App</h3>
-        <p className="text-sm text-muted-foreground">
-          Open Telegram app → Settings → Devices → Link Desktop Device
+    <div className="space-y-4">
+      <div className="text-center">
+        <p className="text-sm text-gray-500 mb-4">
+          Scan this QR code with your Telegram mobile app to connect your account
         </p>
+        
+        {errorMessage && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
+        
+        {qrLink ? (
+          <Card className="p-4 bg-white mx-auto max-w-[220px]">
+            <div className="flex justify-center items-center">
+              <QRCode value={qrLink} size={200} />
+            </div>
+          </Card>
+        ) : (
+          <div className="h-[200px] flex items-center justify-center border rounded">
+            <p className="text-gray-400">QR code unavailable</p>
+          </div>
+        )}
       </div>
       
-      <div className="flex space-x-3 mt-4">
-        <Button variant="outline" onClick={onCancel} disabled={isLoading}>
-          Cancel
-        </Button>
-        <Button 
-          onClick={generateQRToken} 
-          disabled={isLoading}
-          variant="secondary"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              New QR Code
-            </>
-          )}
+      <div className="text-center text-sm text-gray-500">
+        <p>Open Telegram on your phone</p>
+        <p>Go to Settings → Devices → Link Desktop Device</p>
+        <p>Scan this QR code with your camera</p>
+      </div>
+      
+      <div className="flex justify-center">
+        <Button onClick={handleRefresh} className="flex items-center gap-2" disabled={isGenerating}>
+          <RefreshCw size={16} />
+          Refresh QR Code
         </Button>
       </div>
     </div>
