@@ -42,16 +42,21 @@ serve(async (req) => {
           console.log("API ID exists:", !!apiId);
           console.log("API Hash exists:", !!apiHash);
           
-          // Make sure we're using an empty StringSession with proper initialization
+          // Create a proper StringSession instance
           const stringSession = new StringSession("");
           
           // Create the client with proper configuration for web environments
-          const client = new TelegramClient(stringSession, parseInt(apiId, 10), apiHash, {
-            connectionRetries: 2,
-            useWSS: true,
-            timeout: 10000,
-            baseLogger: console
-          });
+          const client = new TelegramClient(
+            stringSession,
+            parseInt(apiId, 10), 
+            apiHash, 
+            {
+              connectionRetries: 2,
+              useWSS: true,
+              timeout: 10000,
+              baseLogger: console
+            }
+          );
           
           // Use proper async connection with minimal configuration
           await client.start({

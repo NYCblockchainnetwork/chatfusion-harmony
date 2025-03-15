@@ -39,12 +39,17 @@ export async function handleQrLogin(supabase, userId) {
     // Initialize Telegram client
     console.log("Initializing Telegram client with API ID:", apiId);
     const stringSession = new StringSession("");
-    const client = new TelegramClient(stringSession, parseInt(apiId, 10), apiHash, {
-      connectionRetries: 3,
-      useWSS: true,
-      timeout: 10000,
-      baseLogger: console
-    });
+    const client = new TelegramClient(
+      stringSession, 
+      parseInt(apiId, 10), 
+      apiHash, 
+      {
+        connectionRetries: 3,
+        useWSS: true,
+        timeout: 10000,
+        baseLogger: console
+      }
+    );
     
     // Use proper async connection
     await client.start({
@@ -153,12 +158,17 @@ export async function processQrCodeLogin(supabase, userId, token) {
     
     // Create client with saved session
     const stringSession = new StringSession(loginState.session_string);
-    const client = new TelegramClient(stringSession, parseInt(apiId, 10), apiHash, {
-      connectionRetries: 3,
-      useWSS: true,
-      timeout: 10000,
-      baseLogger: console
-    });
+    const client = new TelegramClient(
+      stringSession, 
+      parseInt(apiId, 10), 
+      apiHash, 
+      {
+        connectionRetries: 3,
+        useWSS: true,
+        timeout: 10000,
+        baseLogger: console
+      }
+    );
     
     // Use proper async connection
     await client.start({
