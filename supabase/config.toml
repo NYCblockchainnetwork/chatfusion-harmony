@@ -102,7 +102,8 @@ vector_port = 54330
 backend = "postgres"
 
 [functions]
-verify_jwt = false
+port = 54321
 
-[functions.telegram-auth]
+[[functions.function]]
+name = "telegram-auth"
 verify_jwt = false
