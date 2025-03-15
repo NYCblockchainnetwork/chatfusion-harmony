@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
@@ -13,9 +13,33 @@ const formatDate = (timestamp: number) => {
 
 const TelegramMessageList: React.FC = () => {
   const { messages, error, refreshMessages } = useTelegram();
+  const [hasError, setHasError] = useState<Error | null>(null);
 
-  if (error) {
-    return <TelegramErrorFallback error={error} />;
+  // Reset error state when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      setHasError(null);
+    }
+  }, [messages]);
+
+  // Handle external errors from context
+  useEffect(() => {
+    if (error) {
+      setHasError(error);
+    }
+  }, [error]);
+
+  // If we have an error, show the error fallback
+  if (hasError) {
+    return (
+      <TelegramErrorFallback 
+        error={hasError} 
+        resetErrorBoundary={() => {
+          setHasError(null);
+          refreshMessages();
+        }} 
+      />
+    );
   }
 
   return (

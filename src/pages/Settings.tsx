@@ -60,7 +60,7 @@ const Settings = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Alert variant={error ? "destructive" : (isConnected ? "default" : "warning")} className="mb-4">
+                <Alert variant={error ? "destructive" : "default"} className="mb-4">
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>
                     {error ? "Integration Error" : (isConnected ? "Using Mock Data" : "Not Connected")}
