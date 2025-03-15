@@ -39,18 +39,28 @@ serve(async (req) => {
         
         try {
           console.log("Validating Telegram credentials...");
-          // Make sure we're using an empty StringSession
+          console.log("API ID exists:", !!apiId);
+          console.log("API Hash exists:", !!apiHash);
+          
+          // Make sure we're using an empty StringSession with proper initialization
           const stringSession = new StringSession("");
           
           // Create the client with proper configuration for web environments
           const client = new TelegramClient(stringSession, parseInt(apiId, 10), apiHash, {
             connectionRetries: 2,
             useWSS: true,
-            timeout: 10000
+            timeout: 10000,
+            baseLogger: console
           });
           
-          // Test connecting to Telegram servers
-          await client.connect();
+          // Use proper async connection with minimal configuration
+          await client.start({
+            phoneNumber: async () => "",
+            password: async () => "",
+            onError: (err) => console.error("Connection error:", err),
+            phoneCode: async () => "",
+          });
+          
           console.log("Successfully connected to Telegram with provided credentials");
           await client.disconnect();
           
