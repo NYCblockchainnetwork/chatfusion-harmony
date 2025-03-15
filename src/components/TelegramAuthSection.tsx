@@ -9,9 +9,7 @@ import { useForm } from "react-hook-form";
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
-
-const TEST_TELEGRAM_API_ID = "12345"; // Replace with test value
-const TEST_TELEGRAM_API_HASH = "abcdef1234567890abcdef1234567890"; // Replace with test value
+import { supabase } from '@/integrations/supabase/client';
 
 const TelegramAuthSection = () => {
   const [isConnecting, setIsConnecting] = useState(false);
@@ -78,14 +76,27 @@ const TelegramAuthSection = () => {
     setErrorMessage(null);
     
     try {
-      console.log("Using test values for Telegram credentials");
+      console.log("Fetching Telegram credentials from Supabase Edge Function");
       
-      const apiIdResult = await saveApiKeyToLocalStorage('telegram_api_id', TEST_TELEGRAM_API_ID);
+      // Call Supabase Edge Function to get secure credentials
+      const { data, error } = await supabase.functions.invoke('get-telegram-credentials', {
+        body: { userId: user.id }
+      });
+      
+      if (error) {
+        throw new Error(`Failed to get credentials: ${error.message}`);
+      }
+      
+      if (!data || !data.apiId || !data.apiHash) {
+        throw new Error("Could not retrieve valid Telegram credentials");
+      }
+      
+      const apiIdResult = await saveApiKeyToLocalStorage('telegram_api_id', data.apiId);
       if (!apiIdResult) {
         throw new Error("Failed to save API ID");
       }
       
-      const apiHashResult = await saveApiKeyToLocalStorage('telegram_api_hash', TEST_TELEGRAM_API_HASH);
+      const apiHashResult = await saveApiKeyToLocalStorage('telegram_api_hash', data.apiHash);
       if (!apiHashResult) {
         throw new Error("Failed to save API Hash");
       }
@@ -99,14 +110,14 @@ const TelegramAuthSection = () => {
       
       toast({
         title: "Success",
-        description: "Connected to Telegram using test credentials. You can now fetch real messages.",
+        description: "Connected to Telegram using secure credentials. You can now fetch real messages.",
       });
     } catch (error) {
-      console.error('Error connecting to Telegram with test values:', error);
-      setErrorMessage(error.message || "Failed to use test credentials");
+      console.error('Error connecting to Telegram with secure credentials:', error);
+      setErrorMessage(error.message || "Failed to use secure credentials");
       toast({
         title: "Connection Failed",
-        description: error.message || "Failed to use test credentials",
+        description: error.message || "Failed to use secure credentials",
         variant: "destructive"
       });
     } finally {
@@ -240,9 +251,9 @@ const TelegramAuthSection = () => {
         ) : (
           <div className="space-y-6">
             <div className="bg-amber-50 p-4 rounded-md border border-amber-200">
-              <p className="text-amber-700 font-medium">Use Test Credentials</p>
+              <p className="text-amber-700 font-medium">Use Secure Credentials</p>
               <p className="text-sm text-amber-600 mb-3">
-                For testing, you can use preconfigured Telegram API credentials.
+                Connect using securely stored Telegram API credentials.
               </p>
               <Button 
                 type="button"
@@ -251,7 +262,7 @@ const TelegramAuthSection = () => {
                 onClick={handleUseEnvSecrets}
                 disabled={isConnecting}
               >
-                {isConnecting ? "Connecting..." : "Use Test Credentials"}
+                {isConnecting ? "Connecting..." : "Use Secure Credentials"}
               </Button>
             </div>
             
