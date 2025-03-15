@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { initializedTelegramClient } from '@/utils/initTelegramClient';
 import { Button } from '@/components/ui/button';
@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import QRCode from 'react-qr-code';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw, Check } from 'lucide-react';
 import LoadingState from './LoadingState';
 
 interface TelegramQRLoginProps {
@@ -16,41 +16,79 @@ interface TelegramQRLoginProps {
 }
 
 const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError }) => {
-  const [qrLink, setQrLink] = useState<string | null>(null);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
+  const [isPending, setIsPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [statusCheckCount, setStatusCheckCount] = useState(0);
+  const [expiresAt, setExpiresAt] = useState<Date | null>(null);
+  const [statusCheckInterval, setStatusCheckInterval] = useState<number | null>(null);
+  const [remainingTime, setRemainingTime] = useState<number>(30);
+  const checkIntervalRef = useRef<number | null>(null);
+  const timerIntervalRef = useRef<number | null>(null);
   const { user } = useAuth();
+
+  // Clean up intervals on unmount
+  useEffect(() => {
+    return () => {
+      if (checkIntervalRef.current) window.clearInterval(checkIntervalRef.current);
+      if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
+    };
+  }, []);
 
   // Generate QR code on component mount
   useEffect(() => {
     generateQrCode();
   }, []);
 
-  // Auto-refresh QR code every 30 seconds (Telegram tokens expire in 30s)
+  // Set up timer to show remaining time for QR code
   useEffect(() => {
-    if (!qrLink) return;
+    if (!expiresAt) return;
     
-    const refreshTimer = setTimeout(() => {
-      console.log("QR code expired, refreshing...");
-      generateQrCode();
-    }, 30000); // 30 seconds
+    const updateRemainingTime = () => {
+      const now = new Date();
+      const expiry = new Date(expiresAt);
+      const timeLeft = Math.max(0, Math.floor((expiry.getTime() - now.getTime()) / 1000));
+      
+      setRemainingTime(timeLeft);
+      
+      if (timeLeft <= 0) {
+        console.log("QR code expired, refreshing...");
+        if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
+        generateQrCode();
+      }
+    };
     
-    return () => clearTimeout(refreshTimer);
-  }, [qrLink]);
+    // Update immediately
+    updateRemainingTime();
+    
+    // Then update every second
+    if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
+    timerIntervalRef.current = window.setInterval(updateRemainingTime, 1000);
+    
+    return () => {
+      if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
+    };
+  }, [expiresAt]);
 
-  // Check status every 3 seconds if we have a token
+  // Set up status check interval
   useEffect(() => {
-    if (!token) return; 
+    if (!token || isChecking || !isPending) return;
     
-    const intervalId = setInterval(() => {
+    const checkStatus = () => {
+      if (!isPending) return;
       checkQrCodeStatus();
-      setStatusCheckCount(prev => prev + 1);
-    }, 3000);
-
-    return () => clearInterval(intervalId);
-  }, [token]);
+    };
+    
+    // Start checking status every 3 seconds
+    if (checkIntervalRef.current) window.clearInterval(checkIntervalRef.current);
+    checkIntervalRef.current = window.setInterval(checkStatus, 3000);
+    
+    return () => {
+      if (checkIntervalRef.current) window.clearInterval(checkIntervalRef.current);
+    };
+  }, [token, isChecking, isPending]);
 
   const generateQrCode = async () => {
     if (!user?.id) {
@@ -58,9 +96,13 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
       return;
     }
 
+    // Clear existing timer and interval
+    if (checkIntervalRef.current) window.clearInterval(checkIntervalRef.current);
+    if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
+    
     setIsGenerating(true);
     setErrorMessage(null);
-    setStatusCheckCount(0);
+    setIsPending(false);
 
     try {
       console.log("Generating QR code for user:", user.id);
@@ -74,11 +116,14 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
         throw new Error("Failed to generate QR code token");
       }
       
-      // Set the QR code URL and token
-      setQrLink(result.qrUrl);
+      // Set the QR code URL, token and expiry
+      setQrUrl(result.qrUrl);
       setToken(result.token);
+      setExpiresAt(new Date(result.expiresAt));
+      setIsPending(true);
       
       console.log("QR code generated successfully:", result.qrUrl);
+      console.log("QR code expires at:", result.expiresAt);
     } catch (error) {
       console.error("Error generating QR code:", error);
       setErrorMessage(error.message || "Failed to generate QR code");
@@ -95,7 +140,11 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
   };
 
   const checkQrCodeStatus = useCallback(async () => {
-    if (!user?.id || !token) return;
+    if (!user?.id || !token || !isPending) return;
+    
+    // Prevent multiple simultaneous checks
+    if (isChecking) return;
+    setIsChecking(true);
     
     try {
       console.log("Checking QR code status for token:", token);
@@ -108,6 +157,12 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
       // If login was successful
       if (result.success) {
         console.log("QR code login confirmed with sessionId:", result.sessionId);
+        
+        // Stop checking status and clear timers
+        setIsPending(false);
+        if (checkIntervalRef.current) window.clearInterval(checkIntervalRef.current);
+        if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
+        
         onSuccess(result.sessionId);
         
         toast({
@@ -123,16 +178,21 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
     } catch (error) {
       console.error("Error checking QR code status:", error);
       
-      // Only show error toast on first error
-      if (statusCheckCount <= 1) {
+      // Only show error toast for critical errors
+      if (error.message.includes("auth") || error.message.includes("login") || error.message.includes("session")) {
+        setErrorMessage(`Authentication error: ${error.message}`);
+        setIsPending(false);
+        
         toast({
-          title: "Status Check Failed",
+          title: "Authentication Error",
           description: error.message || "Failed to check QR code status",
           variant: "destructive"
         });
       }
+    } finally {
+      setIsChecking(false);
     }
-  }, [user?.id, token, statusCheckCount, onSuccess]);
+  }, [user?.id, token, isPending, isChecking, onSuccess]);
 
   const handleRefresh = () => {
     generateQrCode();
@@ -160,12 +220,37 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
           </Alert>
         )}
         
-        {qrLink ? (
-          <Card className="p-4 bg-white mx-auto max-w-[220px]">
-            <div className="flex justify-center items-center">
-              <QRCode value={qrLink} size={200} />
+        {qrUrl ? (
+          <>
+            <Card className="p-4 bg-white mx-auto max-w-[220px] relative">
+              <div className="flex justify-center items-center">
+                <QRCode value={qrUrl} size={200} />
+              </div>
+              
+              {remainingTime <= 10 && (
+                <div className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+                  {remainingTime}s
+                </div>
+              )}
+            </Card>
+            
+            <div className="mt-2 text-sm text-gray-500">
+              {remainingTime > 0 ? (
+                <p>Expires in {remainingTime} seconds</p>
+              ) : (
+                <p>Expired! Generating new code...</p>
+              )}
             </div>
-          </Card>
+            
+            {isPending && (
+              <div className="mt-2 flex items-center justify-center text-sm text-blue-500">
+                <div className="animate-pulse flex gap-2 items-center">
+                  <span className="h-2 w-2 rounded-full bg-blue-500 inline-block"></span>
+                  <span>Waiting for you to scan the QR code...</span>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="h-[200px] flex items-center justify-center border rounded">
             <p className="text-gray-400">QR code unavailable</p>
@@ -180,8 +265,12 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
       </div>
       
       <div className="flex justify-center">
-        <Button onClick={handleRefresh} className="flex items-center gap-2" disabled={isGenerating}>
-          <RefreshCw size={16} />
+        <Button 
+          onClick={handleRefresh} 
+          className="flex items-center gap-2" 
+          disabled={isGenerating}
+        >
+          <RefreshCw size={16} className={isGenerating ? "animate-spin" : ""} />
           Refresh QR Code
         </Button>
       </div>
