@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { telegramClient } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { validateTelegramCredentials } from "@/utils/telegramCredentialValidator";
 
 interface UseTelegramVerificationProps {
   onSuccess: (sessionId: string, phone?: string) => void;
@@ -29,35 +30,32 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
         setIsLoading(true);
         setError(null);
         
-        console.log("Fetching Telegram API credentials from edge function");
-        console.log("User authenticated:", isAuthenticated, "User ID:", user.id);
+        // Get credentials from localStorage
+        const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
+        const apiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
         
-        // Attempt to get credentials
-        const credentials = await telegramClient.getApiCredentials(user.id);
+        if (!apiId || !apiHash) {
+          setError("Telegram API credentials not found. Please set them in Settings first.");
+          return;
+        }
         
-        // Store credentials in localStorage for client-side use
-        localStorage.setItem(`telegram_api_id_${user.id}`, credentials.apiId);
-        localStorage.setItem(`telegram_api_hash_${user.id}`, credentials.apiHash);
+        // Validate the credentials
+        const result = await validateTelegramCredentials(apiId, apiHash, user.id);
         
-        console.log("Successfully loaded Telegram API credentials");
+        if (!result.valid) {
+          setError(`Invalid credentials: ${result.message}`);
+          return;
+        }
+        
         setHasLoadedCredentials(true);
       } catch (error) {
         console.error("Error loading Telegram credentials:", error);
-        let errorMessage = "Failed to load Telegram credentials.";
         
-        // Check for specific authentication errors
-        if (error.message && (
-            error.message.includes("No active session") || 
-            error.message.includes("Authentication error") ||
-            error.message.includes("Invalid authentication token") ||
-            error.message.includes("auth"))) {
-          errorMessage = "Authentication failed. Please log in again and try once more.";
-        }
+        setError("Failed to validate credentials. Please check your Settings.");
         
-        setError(errorMessage);
         toast({
           title: "Error",
-          description: errorMessage,
+          description: "Failed to validate Telegram credentials",
           variant: "destructive"
         });
       } finally {

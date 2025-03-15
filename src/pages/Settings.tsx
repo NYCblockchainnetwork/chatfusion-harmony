@@ -1,15 +1,139 @@
 
-import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTelegram } from '@/contexts/TelegramContext';
-import { AlertCircle } from 'lucide-react';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle, Check } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Settings = () => {
   const { user } = useAuth();
   const { isConnected, error } = useTelegram();
+  const [apiId, setApiId] = useState('');
+  const [apiHash, setApiHash] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationStatus, setValidationStatus] = useState<'none' | 'success' | 'error'>('none');
+  const [validationMessage, setValidationMessage] = useState('');
+  
+  useEffect(() => {
+    // Load saved credentials if available
+    const loadSavedCredentials = async () => {
+      if (!user?.id) return;
+      
+      try {
+        // Try to load from localStorage first for quick UI rendering
+        const storedApiId = localStorage.getItem(`telegram_api_id_${user.id}`);
+        const storedApiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
+        
+        if (storedApiId) setApiId(storedApiId);
+        if (storedApiHash) setApiHash(storedApiHash);
+        
+        // Then try to load from Supabase for more secure storage
+        const { data: sessionData } = await supabase.auth.getSession();
+        
+        if (!sessionData.session) {
+          console.error("No active session found");
+          return;
+        }
+        
+        const { data, error } = await supabase.functions.invoke('get-telegram-credentials', {
+          body: { userId: user.id },
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`
+          }
+        });
+        
+        if (error) {
+          console.error("Error fetching credentials:", error);
+          return;
+        }
+        
+        if (data?.apiId) {
+          setApiId(data.apiId);
+          localStorage.setItem(`telegram_api_id_${user.id}`, data.apiId);
+        }
+        
+        if (data?.apiHash) {
+          setApiHash(data.apiHash);
+          localStorage.setItem(`telegram_api_hash_${user.id}`, data.apiHash);
+        }
+      } catch (error) {
+        console.error("Error loading saved credentials:", error);
+      }
+    };
+    
+    loadSavedCredentials();
+  }, [user?.id]);
+  
+  const validateCredentials = async () => {
+    if (!apiId || !apiHash) {
+      toast({
+        title: "Validation Error",
+        description: "API ID and API Hash are required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsValidating(true);
+    setValidationStatus('none');
+    setValidationMessage('');
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('telegram-auth', {
+        body: { 
+          method: "validate-credentials",
+          apiId,
+          apiHash,
+          userId: user?.id
+        }
+      });
+      
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      if (!data.valid) {
+        setValidationStatus('error');
+        setValidationMessage(data.error || "Invalid credentials");
+        toast({
+          title: "Validation Failed",
+          description: data.error || "Invalid credentials",
+          variant: "destructive"
+        });
+      } else {
+        setValidationStatus('success');
+        setValidationMessage(data.message || "Credentials valid");
+        toast({
+          title: "Success",
+          description: "Telegram credentials validated successfully",
+        });
+        
+        // Save to localStorage for quick access
+        if (user?.id) {
+          localStorage.setItem(`telegram_api_id_${user.id}`, apiId);
+          localStorage.setItem(`telegram_api_hash_${user.id}`, apiHash);
+        }
+      }
+    } catch (error) {
+      console.error("Error validating credentials:", error);
+      setValidationStatus('error');
+      setValidationMessage(error.message || "Failed to validate credentials");
+      toast({
+        title: "Validation Error",
+        description: error.message || "Failed to validate credentials",
+        variant: "destructive"
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
   
   return (
     <div className="min-h-screen bg-gray-50">
@@ -56,37 +180,86 @@ const Settings = () => {
               <CardHeader>
                 <CardTitle>Telegram Integration</CardTitle>
                 <CardDescription>
-                  Configure your Telegram integration settings
+                  Configure your Telegram API credentials
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <Alert variant={error ? "destructive" : "default"} className="mb-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>
-                    {error ? "Integration Error" : (isConnected ? "Using Mock Data" : "Not Connected")}
-                  </AlertTitle>
-                  <AlertDescription>
-                    {error 
-                      ? "There was an error connecting to Telegram. Using mock data instead."
-                      : "This application is using simulated Telegram data for demonstration purposes."}
-                  </AlertDescription>
-                </Alert>
+              <CardContent className="space-y-6">
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Integration Error</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
                 
                 <div className="space-y-4">
-                  <p className="text-sm text-gray-700">
-                    <strong>Browser Compatibility Note:</strong> The official Telegram client library requires 
-                    Node.js and cannot run directly in browsers due to its dependencies on Node-specific 
-                    modules like <code>crypto</code> and <code>net</code>.
-                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="apiId">API ID</Label>
+                    <Input 
+                      id="apiId" 
+                      value={apiId} 
+                      onChange={(e) => setApiId(e.target.value)} 
+                      placeholder="Enter your Telegram API ID"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      <a 
+                        href="https://my.telegram.org/apps" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-blue-500 hover:underline"
+                      >
+                        Get this from my.telegram.org/apps
+                      </a>
+                    </p>
+                  </div>
                   
-                  <p className="text-sm text-gray-700">
-                    For a production application, you would need to:
-                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="apiHash">API Hash</Label>
+                    <Input 
+                      id="apiHash" 
+                      value={apiHash} 
+                      onChange={(e) => setApiHash(e.target.value)} 
+                      placeholder="Enter your Telegram API Hash"
+                      type="password"
+                    />
+                  </div>
                   
-                  <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
-                    <li>Create a backend service that uses the Telegram API</li>
-                    <li>Expose a REST or WebSocket API for your frontend</li>
-                    <li>Handle authentication and message processing on the server</li>
+                  <Button 
+                    onClick={validateCredentials} 
+                    disabled={isValidating || !apiId || !apiHash}
+                    className="w-full mt-2"
+                  >
+                    {isValidating ? "Validating..." : "Validate Credentials"}
+                  </Button>
+                  
+                  {validationStatus === 'success' && (
+                    <Alert className="bg-green-50 border-green-200">
+                      <Check className="h-4 w-4 text-green-500" />
+                      <AlertTitle className="text-green-700">Validation Successful</AlertTitle>
+                      <AlertDescription className="text-green-600">
+                        {validationMessage}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  
+                  {validationStatus === 'error' && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Validation Failed</AlertTitle>
+                      <AlertDescription>{validationMessage}</AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+                
+                <div className="border-t pt-4 mt-4">
+                  <h3 className="text-lg font-medium mb-2">What's Next?</h3>
+                  <p className="text-sm text-gray-700 mb-2">
+                    After validating your API credentials, you can:
+                  </p>
+                  <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 pl-2">
+                    <li>Go to the home page to connect your Telegram account</li>
+                    <li>Use QR code or phone number authentication to log in</li>
+                    <li>Start receiving and processing your Telegram messages</li>
                   </ul>
                 </div>
               </CardContent>

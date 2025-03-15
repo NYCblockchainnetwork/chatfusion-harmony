@@ -7,6 +7,12 @@ import VerificationCodeInput from './VerificationCodeInput';
 import ErrorDisplay from './ErrorDisplay';
 import { useTelegramVerification } from '@/hooks/useTelegramVerification';
 import TelegramQRLogin from './TelegramQRLogin';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertCircle, Check } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { validateTelegramCredentials } from '@/utils/telegramCredentialValidator';
+import LoadingState from './LoadingState';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface TelegramPhoneVerificationProps {
   onSuccess: (sessionId: string, phone?: string) => void;
@@ -18,6 +24,10 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
   onCancel
 }) => {
   const [tabValue, setTabValue] = useState<string>("qr");
+  const [credentialsValid, setCredentialsValid] = useState<boolean | null>(null);
+  const [validationMessage, setValidationMessage] = useState<string>("");
+  const [isValidating, setIsValidating] = useState(true);
+  const { user } = useAuth();
   
   const {
     phone,
@@ -33,10 +43,40 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
     goBackToPhone
   } = useTelegramVerification({ onSuccess });
 
-  // Set debug console log for mounting
+  // Validate credentials on mount
   useEffect(() => {
-    console.log("TelegramPhoneVerification mounted, default tab:", tabValue);
-  }, []);
+    if (!user?.id) return;
+    
+    const checkCredentials = async () => {
+      try {
+        setIsValidating(true);
+        setCredentialsValid(null);
+        
+        // Get credentials from localStorage first for speed
+        const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
+        const apiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
+        
+        if (!apiId || !apiHash) {
+          setCredentialsValid(false);
+          setValidationMessage("API credentials not found. Please set them in Settings first.");
+          return;
+        }
+        
+        // Validate the credentials
+        const result = await validateTelegramCredentials(apiId, apiHash, user.id);
+        setCredentialsValid(result.valid);
+        setValidationMessage(result.message);
+      } catch (error) {
+        console.error("Error validating credentials:", error);
+        setCredentialsValid(false);
+        setValidationMessage("Failed to validate credentials. Please check Settings.");
+      } finally {
+        setIsValidating(false);
+      }
+    };
+    
+    checkCredentials();
+  }, [user?.id]);
 
   const handleTabChange = (value: string) => {
     console.log("Tab changed to:", value);
@@ -47,10 +87,63 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
     console.log("QR login successful, sessionId:", sessionId);
     onSuccess(sessionId);
   };
+  
+  // Show loading state while validating credentials
+  if (isValidating) {
+    return <LoadingState title="Checking Telegram Credentials" description="Validating your API credentials..." />;
+  }
+  
+  // If credentials are invalid, show error and redirect to settings
+  if (credentialsValid === false) {
+    return (
+      <Card className="border-red-200">
+        <CardHeader>
+          <CardTitle className="text-red-600">Telegram Credentials Invalid</CardTitle>
+          <CardDescription>
+            Your Telegram API credentials are missing or invalid
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Validation Failed</AlertTitle>
+            <AlertDescription>{validationMessage}</AlertDescription>
+          </Alert>
+          
+          <p className="text-sm text-gray-700">
+            Please go to Settings and configure your Telegram API credentials:
+          </p>
+          
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                window.location.href = '/settings';
+              }}
+            >
+              Go to Settings
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <h3 className="text-lg font-medium">Connect to Telegram</h3>
+      
+      {credentialsValid && (
+        <Alert className="bg-green-50 border-green-200">
+          <Check className="h-4 w-4 text-green-500" />
+          <AlertTitle className="text-green-700">Credentials Validated</AlertTitle>
+          <AlertDescription className="text-green-600">
+            {validationMessage}
+          </AlertDescription>
+        </Alert>
+      )}
       
       <Tabs defaultValue="qr" onValueChange={handleTabChange} value={tabValue}>
         <TabsList className="grid w-full grid-cols-2">

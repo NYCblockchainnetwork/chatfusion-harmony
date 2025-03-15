@@ -50,7 +50,50 @@ serve(async (req) => {
           console.log("Successfully connected to Telegram with provided credentials");
           await client.disconnect();
           
-          return createResponse({ valid: true, message: "Credentials valid" });
+          // If we reached here, credentials are valid
+          // Store them in Supabase user_api_keys table if userId is provided
+          if (userId) {
+            // Store API ID
+            const { error: apiIdError } = await supabase
+              .from("user_api_keys")
+              .upsert(
+                {
+                  user_id: userId,
+                  service: "telegram_api_id",
+                  api_key: apiId,
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: "user_id,service" }
+              );
+            
+            if (apiIdError) {
+              console.error("Error storing API ID:", apiIdError);
+              // Continue anyway, this is not critical
+            }
+            
+            // Store API Hash
+            const { error: apiHashError } = await supabase
+              .from("user_api_keys")
+              .upsert(
+                {
+                  user_id: userId,
+                  service: "telegram_api_hash",
+                  api_key: apiHash,
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: "user_id,service" }
+              );
+            
+            if (apiHashError) {
+              console.error("Error storing API Hash:", apiHashError);
+              // Continue anyway, this is not critical
+            }
+          }
+          
+          return createResponse({ 
+            valid: true, 
+            message: "Credentials valid and successfully connected to Telegram" 
+          });
         } catch (error) {
           console.error("Error validating credentials:", error);
           return createResponse({
