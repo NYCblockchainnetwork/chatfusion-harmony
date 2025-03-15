@@ -14,31 +14,57 @@ interface TelegramRequest {
   sessionString?: string;
 }
 
+interface TelegramMessage {
+  id: number;
+  text: string;
+  date: number;
+  from: {
+    username: string;
+    firstName: string;
+    lastName?: string;
+  }
+}
+
 // Function to call the Telegram API directly
 async function fetchTelegramMessages(credentials: {
   apiId: number;
   apiHash: string;
   sessionString?: string;
-}, handle: string, limit: number = 5) {
+}, handle: string, limit: number = 5): Promise<{ messages: TelegramMessage[] }> {
   try {
-    console.log(`Fetching messages for handle: ${handle}`);
+    console.log(`Fetching live messages for handle: ${handle}`);
     
-    // This is a simplified implementation that makes direct HTTP requests to Telegram API
-    // In a real implementation, you would use proper API endpoints and authentication
+    // Direct HTTP request to the Telegram API
+    const url = `https://api.telegram.org/bot${credentials.apiHash}/getUpdates`;
     
-    // For now, return mock data since we can't use the Node.js telegram library in Deno
-    return {
-      messages: Array.from({ length: Math.floor(Math.random() * limit) + 1 }).map((_, i) => ({
-        id: i + 1,
-        text: `Message ${i + 1} from @${handle} (via Edge Function)`,
-        timestamp: new Date(Date.now() - Math.random() * 86400000 * 7).toISOString(),
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error(`Telegram API error: ${errorData}`);
+      throw new Error(`Telegram API returned ${response.status}: ${errorData}`);
+    }
+    
+    const data = await response.json();
+    console.log(`Received response from Telegram API for ${handle}`);
+    
+    // Process and transform the raw Telegram API response
+    // This is a simplified example and might need adjustments based on the actual API response
+    const messages = data.result
+      .filter((update: any) => update.message && update.message.from.username === handle)
+      .slice(0, limit)
+      .map((update: any) => ({
+        id: update.message.message_id,
+        text: update.message.text || "(No text content)",
+        date: update.message.date,
         from: {
-          username: handle,
-          firstName: "Telegram",
-          lastName: "User"
+          username: update.message.from.username,
+          firstName: update.message.from.first_name,
+          lastName: update.message.from.last_name
         }
-      }))
-    };
+      }));
+    
+    return { messages };
   } catch (error) {
     console.error(`Error fetching messages for ${handle}:`, error);
     throw error;
@@ -77,14 +103,14 @@ serve(async (req) => {
     console.log(`Processing request with API ID: ${apiIdToUse}`);
     
     // Create object to store messages for each handle
-    const result: Record<string, any[]> = {};
+    const result: Record<string, TelegramMessage[]> = {};
     
     // Fetch messages for each handle
     for (const handle of handles) {
       const cleanHandle = handle.startsWith('@') ? handle.substring(1) : handle;
       
       try {
-        console.log(`Processing handle: @${cleanHandle}`);
+        console.log(`Processing handle: @${cleanHandle} for live data`);
         
         const response = await fetchTelegramMessages({
           apiId: apiIdToUse,
@@ -96,10 +122,11 @@ serve(async (req) => {
         
       } catch (error) {
         console.error(`Error processing @${cleanHandle}:`, error);
+        // Return error in result but don't provide mock data
         result[cleanHandle] = [{
           id: 0,
           text: `Error processing @${cleanHandle}: ${error.message}`,
-          timestamp: new Date().toISOString(),
+          date: Math.floor(Date.now() / 1000),
           from: {
             username: cleanHandle,
             firstName: 'Error',
@@ -108,7 +135,7 @@ serve(async (req) => {
       }
     }
     
-    console.log("Completed fetching messages for all handles:", Object.keys(result));
+    console.log("Completed fetching live messages for all handles:", Object.keys(result));
     
     // Return the results
     return new Response(
