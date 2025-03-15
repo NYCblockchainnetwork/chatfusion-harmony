@@ -19,8 +19,6 @@ max_rows = 1000
 [db]
 # Port to use for the local database URL.
 port = 54322
-# Port used by db diff when connecting to a remote database to pull the schema diff.
-diff_port = 54323
 # The database major version to use. This has to be the same as your remote database's. Run `SHOW
 # server_version;` on the remote database to check.
 major_version = 15
@@ -73,9 +71,6 @@ site_url = "http://127.0.0.1:3000"
 additional_redirect_urls = ["https://127.0.0.1:3000"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
-# During development, disables all authentication requirements, so no ID token or API key is needed
-# Set to true only when you want to test Supabase Authentication.
-disable_signup = false
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
@@ -106,13 +101,8 @@ vector_port = 54330
 # Configure one of the supported backends: `postgres`, `bigquery`
 backend = "postgres"
 
-# Configures KV store used by realtime
-[kv]
-# Port that the KV store is listening on
-port = 54331
-
 [functions]
-enabled = true
+verify_jwt = false
 
 [functions.telegram-auth]
 verify_jwt = false
