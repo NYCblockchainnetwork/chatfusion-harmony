@@ -73,16 +73,18 @@ serve(async (req) => {
 
     // Get the secret key from environment variables when the service is a predefined one
     let finalApiKey = apiKey;
-    if (service === 'telegram_api_id' || service === 'telegram_api_hash') {
-      // Check if we should use the environment secret
-      const secretValue = Deno.env.get(service);
-      if (apiKey === service && secretValue) {
-        console.log(`Using secret value for ${service} from environment`);
+    
+    // Check if we need to use environment secrets for Telegram credentials
+    if (apiKey === 'telegram_api_id' || apiKey === 'telegram_api_hash') {
+      // Get the actual secret from Supabase environment
+      const secretValue = Deno.env.get(apiKey);
+      if (secretValue) {
+        console.log(`Using secret value for ${apiKey} from Supabase environment`);
         finalApiKey = secretValue;
         console.log(`Secret value found, length: ${finalApiKey.length}`);
-      } else if (apiKey === service) {
-        console.error(`Secret ${service} not found in environment variables`);
-        return createErrorResponse(`Error: Required secret ${service} not found in Supabase`);
+      } else {
+        console.error(`Secret ${apiKey} not found in environment variables`);
+        return createErrorResponse(`Error: Required secret ${apiKey} not found in Supabase`);
       }
     }
 

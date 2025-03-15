@@ -42,7 +42,7 @@ const TelegramAuthSection = () => {
           return;
         }
         
-        // Try to get saved API credentials from Edge Function
+        // Try to get saved API credentials
         const apiId = await getApiKey('telegram_api_id');
         const apiHash = await getApiKey('telegram_api_hash');
         
@@ -52,16 +52,12 @@ const TelegramAuthSection = () => {
         });
         
         // If we have credentials, pre-fill the form
-        if (apiId && apiId !== 'telegram_api_id') {
+        if (apiId) {
           form.setValue('apiId', apiId);
-        } else if (import.meta.env.VITE_TELEGRAM_API_ID) {
-          form.setValue('apiId', import.meta.env.VITE_TELEGRAM_API_ID);
         }
         
-        if (apiHash && apiHash !== 'telegram_api_hash') {
+        if (apiHash) {
           form.setValue('apiHash', apiHash);
-        } else if (import.meta.env.VITE_TELEGRAM_API_HASH) {
-          form.setValue('apiHash', import.meta.env.VITE_TELEGRAM_API_HASH);
         }
       } catch (error) {
         console.error('Error loading Telegram credentials:', error);
@@ -101,20 +97,9 @@ const TelegramAuthSection = () => {
     try {
       console.log("Saving Telegram credentials for user:", user.id);
       
-      // First, determine if we should use environment variables
-      let finalApiId = apiId;
-      let finalApiHash = apiHash;
-      
-      // Check if we're using predefined environment variables
-      if (apiId === import.meta.env.VITE_TELEGRAM_API_ID || apiId === 'telegram_api_id') {
-        finalApiId = 'telegram_api_id'; // This will trigger the edge function to use the secret
-        console.log("Using predefined Telegram API ID from environment");
-      }
-      
-      if (apiHash === import.meta.env.VITE_TELEGRAM_API_HASH || apiHash === 'telegram_api_hash') {
-        finalApiHash = 'telegram_api_hash'; // This will trigger the edge function to use the secret
-        console.log("Using predefined Telegram API Hash from environment");
-      }
+      // Save using predefined environment variables if available
+      let finalApiId = apiId === import.meta.env.VITE_TELEGRAM_API_ID ? 'telegram_api_id' : apiId;
+      let finalApiHash = apiHash === import.meta.env.VITE_TELEGRAM_API_HASH ? 'telegram_api_hash' : apiHash;
       
       // Save API ID first
       console.log("Saving API ID...", finalApiId);
