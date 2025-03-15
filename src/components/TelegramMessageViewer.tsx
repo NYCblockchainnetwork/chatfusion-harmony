@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import HandleInput from './telegram/HandleInput';
@@ -121,8 +120,7 @@ const TelegramMessageViewer = () => {
           limit: 5,
           apiId: apiId ? parseInt(apiId, 10) : undefined,
           apiHash,
-          sessionString: sessionStringToUse,
-          phone: user.phone // If we have user's phone in the auth context
+          sessionString: sessionStringToUse
         }
       });
       

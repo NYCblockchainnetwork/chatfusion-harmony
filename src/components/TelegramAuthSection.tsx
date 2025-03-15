@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { useUserSettings } from '@/hooks/use-user-settings';
@@ -10,11 +11,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
+import TelegramPhoneVerification from './telegram/TelegramPhoneVerification';
 
 const TelegramAuthSection = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showPhoneVerification, setShowPhoneVerification] = useState(false);
   const { settings, updateSettings } = useUserSettings();
   const { user } = useAuth();
   
@@ -35,9 +38,15 @@ const TelegramAuthSection = () => {
       
       const storedApiId = localStorage.getItem(`telegram_api_id_${user.id}`);
       const storedApiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
+      const sessionString = localStorage.getItem(`telegram_session_${user.id}`);
       
       if (storedApiId) form.setValue('apiId', storedApiId);
       if (storedApiHash) form.setValue('apiHash', storedApiHash);
+      
+      // If we have credentials and a session, consider it connected
+      if (storedApiId && storedApiHash && sessionString) {
+        setConnectionStatus('connected');
+      }
     } catch (error) {
       console.error('Error loading Telegram credentials:', error);
       setErrorMessage("Failed to load saved credentials");
@@ -101,17 +110,9 @@ const TelegramAuthSection = () => {
         throw new Error("Failed to save API Hash");
       }
       
-      await updateSettings({
-        telegramIntegrationEnabled: true,
-        telegramHandles: settings?.telegramHandles || []
-      });
+      // Show the phone verification UI
+      setShowPhoneVerification(true);
       
-      setConnectionStatus('connected');
-      
-      toast({
-        title: "Success",
-        description: "Connected to Telegram using secure credentials. You can now fetch real messages.",
-      });
     } catch (error) {
       console.error('Error connecting to Telegram with secure credentials:', error);
       setErrorMessage(error.message || "Failed to use secure credentials");
@@ -120,7 +121,6 @@ const TelegramAuthSection = () => {
         description: error.message || "Failed to use secure credentials",
         variant: "destructive"
       });
-    } finally {
       setIsConnecting(false);
     }
   };
@@ -160,17 +160,9 @@ const TelegramAuthSection = () => {
         throw new Error("Failed to save API Hash");
       }
       
-      await updateSettings({
-        telegramIntegrationEnabled: true,
-        telegramHandles: settings?.telegramHandles || []
-      });
+      // Show the phone verification UI
+      setShowPhoneVerification(true);
       
-      setConnectionStatus('connected');
-      
-      toast({
-        title: "Success",
-        description: "Connected to Telegram successfully",
-      });
     } catch (error) {
       console.error('Error connecting to Telegram:', error);
       setErrorMessage(error.message || "Failed to save API credentials");
@@ -179,7 +171,6 @@ const TelegramAuthSection = () => {
         description: error.message || "Failed to save API credentials",
         variant: "destructive"
       });
-    } finally {
       setIsConnecting(false);
     }
   };
@@ -197,6 +188,7 @@ const TelegramAuthSection = () => {
     try {
       localStorage.removeItem(`telegram_api_id_${user.id}`);
       localStorage.removeItem(`telegram_api_hash_${user.id}`);
+      localStorage.removeItem(`telegram_session_${user.id}`);
       
       await updateSettings({
         telegramIntegrationEnabled: false,
@@ -221,6 +213,33 @@ const TelegramAuthSection = () => {
     }
   };
   
+  const handleVerificationSuccess = (sessionString: string) => {
+    // Save the session string
+    if (user?.id) {
+      localStorage.setItem(`telegram_session_${user.id}`, sessionString);
+    }
+    
+    // Update settings
+    updateSettings({
+      telegramIntegrationEnabled: true,
+      telegramHandles: settings?.telegramHandles || []
+    });
+    
+    setConnectionStatus('connected');
+    setShowPhoneVerification(false);
+    setIsConnecting(false);
+    
+    toast({
+      title: "Success",
+      description: "Connected to Telegram successfully. You can now fetch messages.",
+    });
+  };
+  
+  const handleVerificationCancel = () => {
+    setShowPhoneVerification(false);
+    setIsConnecting(false);
+  };
+  
   return (
     <Card className="mb-6">
       <CardHeader>
@@ -238,7 +257,12 @@ const TelegramAuthSection = () => {
           </Alert>
         )}
         
-        {connectionStatus === 'connected' ? (
+        {showPhoneVerification ? (
+          <TelegramPhoneVerification
+            onSuccess={handleVerificationSuccess}
+            onCancel={handleVerificationCancel}
+          />
+        ) : connectionStatus === 'connected' ? (
           <div className="space-y-4">
             <div className="bg-green-50 p-3 rounded-md border border-green-200">
               <p className="text-green-700 font-medium">Connected to Telegram</p>
