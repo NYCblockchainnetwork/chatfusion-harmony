@@ -294,7 +294,7 @@ const TelegramMessageViewer = () => {
   const renderCredentialsForm = () => {
     return (
       <div className="space-y-6">
-        <Alert variant="info" className="mb-4">
+        <Alert className="mb-4">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Telegram API Credentials Required</AlertTitle>
           <AlertDescription>
