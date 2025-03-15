@@ -66,7 +66,7 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
           {step === "phone" ? (
             <div className="space-y-4">
               <PhoneNumberInput 
-                value={phone} 
+                phone={phone} 
                 onChange={handlePhoneChange} 
                 disabled={isLoading}
               />
@@ -86,7 +86,8 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
           ) : (
             <div className="space-y-4">
               <VerificationCodeInput 
-                value={code} 
+                code={code}
+                phone={phone}
                 onChange={handleCodeChange} 
                 disabled={isLoading}
               />

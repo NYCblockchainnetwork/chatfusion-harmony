@@ -118,7 +118,10 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({ onSuccess, onError })
   };
 
   if (isGenerating) {
-    return <LoadingState message="Generating QR code..." />;
+    return <LoadingState 
+      title="Generating QR Code" 
+      description="Please wait while we generate a secure QR code..." 
+    />;
   }
 
   return (
