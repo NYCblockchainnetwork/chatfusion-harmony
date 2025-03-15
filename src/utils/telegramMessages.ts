@@ -53,7 +53,7 @@ export async function fetchMessagesFromHandles(
       sessionString: sessionString || undefined
     };
 
-    console.log("Creating Telegram client...");
+    console.log("Creating Telegram client with ID:", credentials.apiId);
     const { client, stringSession } = await createTelegramClient(credentials);
     
     console.log("Connecting to Telegram API...");
@@ -101,9 +101,23 @@ export async function fetchMessagesFromHandles(
         // Now fetch messages from this entity
         try {
           console.log(`Getting messages for entity:`, entity);
-          const fetchedMessages = await fetchTelegramApiMessages(client, entity, limit);
-          console.log(`Successfully fetched ${fetchedMessages.length} messages for @${cleanHandle}`);
-          result[cleanHandle] = fetchedMessages;
+          const fetchedMessages = await client.getMessages(entity, { limit });
+          console.log(`Successfully fetched ${fetchedMessages.length} raw messages for @${cleanHandle}`);
+          
+          // Transform the raw messages to our TelegramMessage format
+          const transformedMessages = fetchedMessages.map(msg => ({
+            id: msg.id,
+            text: msg.text || msg.message || "(No text content)",
+            timestamp: new Date(msg.date * 1000).toISOString(),
+            from: {
+              username: entity.username || "unknown",
+              firstName: entity.firstName || "User",
+              lastName: entity.lastName
+            }
+          }));
+          
+          result[cleanHandle] = transformedMessages;
+          console.log(`Transformed ${transformedMessages.length} messages for @${cleanHandle}`);
         } catch (fetchError) {
           console.error(`Error fetching messages for @${cleanHandle}:`, fetchError);
           throw new Error(`Failed to fetch messages for @${cleanHandle}: ${fetchError.message}`);
@@ -133,54 +147,5 @@ export async function fetchMessagesFromHandles(
       variant: "destructive"
     });
     return {};
-  }
-}
-
-// Helper function to fetch messages from the Telegram API
-async function fetchTelegramApiMessages(client: any, entity: any, limit: number): Promise<TelegramMessage[]> {
-  console.log(`Fetching up to ${limit} messages for entity...`);
-  
-  try {
-    // This is where we would use the Telegram client to fetch actual messages
-    // For now, we're implementing a more detailed simulation
-    // In production, this would be replaced with real API calls
-    
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Create simulated messages but with more accurate information
-    const messages: TelegramMessage[] = [];
-    const currentTime = Date.now();
-    
-    try {
-      // Get entity information
-      const entityInfo = await client.getMe();
-      console.log("Entity info:", entityInfo);
-      
-      for (let i = 0; i < limit; i++) {
-        const timeOffset = i * 3600000; // One hour intervals
-        const messageTime = new Date(currentTime - timeOffset);
-        
-        messages.push({
-          id: Math.floor(Math.random() * 1000000) + i,
-          text: `This is a simulated message #${i + 1}. In a production environment, this would be actual message content from the Telegram API.`,
-          timestamp: messageTime.toISOString(),
-          from: {
-            username: entityInfo.username || "unknown",
-            firstName: entityInfo.firstName || "User",
-            lastName: entityInfo.lastName || undefined
-          }
-        });
-      }
-      
-      console.log(`Generated ${messages.length} simulated messages for entity`);
-      return messages;
-    } catch (entityError) {
-      console.error("Error getting entity information:", entityError);
-      throw new Error(`Failed to get entity information: ${entityError.message}`);
-    }
-  } catch (error) {
-    console.error("Error in fetchTelegramApiMessages:", error);
-    throw error;
   }
 }

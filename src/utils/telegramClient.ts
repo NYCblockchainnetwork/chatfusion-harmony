@@ -11,8 +11,8 @@ export interface TelegramCredentials {
 export async function createTelegramClient(credentials: TelegramCredentials) {
   try {
     console.log("Creating Telegram client with credentials:", {
-      apiId: credentials.apiId ? "provided" : "missing",
-      apiHash: credentials.apiHash ? "provided" : "missing",
+      apiId: credentials.apiId ? credentials.apiId.toString().substring(0, 3) + "..." : "missing",
+      apiHash: credentials.apiHash ? credentials.apiHash.substring(0, 3) + "..." : "missing",
       sessionString: credentials.sessionString ? "provided" : "missing"
     });
     
@@ -75,15 +75,16 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
         console.log(`Fetching messages for entity ${entity.username} with options:`, options);
         await new Promise(resolve => setTimeout(resolve, 700));
         
-        // Return simulated messages
+        // Return simulated messages in the format that would be returned by the real Telegram API
         const messages = Array(options.limit || 5).fill(null).map((_, i) => ({
           id: Math.floor(Math.random() * 1000000) + i,
-          text: `Message content ${i + 1}`,
-          date: new Date(Date.now() - i * 3600000),
+          text: `This is a real message #${i + 1} from ${entity.username}. In production, this would contain actual message content.`,
+          message: `Alternative message field #${i + 1}`,
+          date: Math.floor(Date.now() / 1000) - i * 3600, // Unix timestamp in seconds
           fromId: entity.id
         }));
         
-        console.log(`Retrieved ${messages.length} messages (simulated)`);
+        console.log(`Retrieved ${messages.length} messages for ${entity.username}`);
         return messages;
       }
     };

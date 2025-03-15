@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -110,6 +111,7 @@ const TelegramMessageViewer = () => {
     }
 
     if (!user) {
+      console.error("No user found in auth context");
       toast({
         title: "Authentication Required",
         description: "You must be signed in to fetch messages",
@@ -118,12 +120,13 @@ const TelegramMessageViewer = () => {
       return;
     }
     
+    console.log("Current user from auth context:", { id: user.id, name: user.name });
     setIsLoading(true);
     setError(null);
     
     try {
       console.log("Starting to fetch messages for handles:", handles);
-      console.log("User ID:", user.id);
+      console.log("Using user ID for fetching:", user.id);
       
       const fetchedMessages = await fetchMessagesFromHandles(handles, 5, user.id);
       
