@@ -30,6 +30,7 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
         setError(null);
         
         console.log("Fetching Telegram API credentials from edge function");
+        console.log("User authenticated:", isAuthenticated, "User ID:", user.id);
         
         // Attempt to get credentials
         const credentials = await telegramClient.getApiCredentials(user.id);
@@ -45,10 +46,11 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
         let errorMessage = "Failed to load Telegram credentials.";
         
         // Check for specific authentication errors
-        if (error.message.includes("No active session") || 
+        if (error.message && (
+            error.message.includes("No active session") || 
             error.message.includes("Authentication error") ||
             error.message.includes("Invalid authentication token") ||
-            error.message.includes("auth")) {
+            error.message.includes("auth"))) {
           errorMessage = "Authentication failed. Please log in again and try once more.";
         }
         

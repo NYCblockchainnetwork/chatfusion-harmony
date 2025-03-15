@@ -38,6 +38,7 @@ serve(async (req) => {
     
     // Extract token
     const token = authHeader.replace('Bearer ', '');
+    console.log("Received token of length:", token.length);
     
     // Get Supabase URL and key from env vars
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -53,11 +54,17 @@ serve(async (req) => {
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
       
       // Verify the JWT token
+      console.log("Verifying JWT token...");
       const { data, error: authError } = await supabase.auth.getUser(token);
       
-      if (authError || !data.user) {
+      if (authError) {
         console.error("Authentication error:", authError);
-        return createResponse({ error: "Invalid authentication token" }, 401);
+        return createResponse({ error: "Invalid authentication token: " + authError.message }, 401);
+      }
+      
+      if (!data || !data.user) {
+        console.error("No user data found in token");
+        return createResponse({ error: "Invalid authentication token: no user data" }, 401);
       }
       
       const user = data.user;
@@ -102,7 +109,7 @@ serve(async (req) => {
       
     } catch (error) {
       console.error("Error validating auth token:", error);
-      return createResponse({ error: "Invalid authentication token" }, 401);
+      return createResponse({ error: "Authentication error: " + error.message }, 401);
     }
     
   } catch (error) {
