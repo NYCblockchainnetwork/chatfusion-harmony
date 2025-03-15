@@ -50,9 +50,9 @@ serve(async (req) => {
       );
     }
 
-    // Create a Supabase client to verify the user's authentication
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    // Create a Supabase client with the authorization header from the request
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY");
     
     if (!supabaseUrl || !supabaseKey) {
       console.error("Missing Supabase configuration");
@@ -65,30 +65,41 @@ serve(async (req) => {
       );
     }
     
-    const supabaseClient = createClient(supabaseUrl, supabaseKey, {
-      global: { 
-        headers: { 
-          Authorization: req.headers.get("Authorization") || "" 
-        } 
-      }
-    });
-    
-    // Verify user authentication
-    console.log("Verifying user authentication");
-    const authResult = await supabaseClient.auth.getUser();
-    
-    if (authResult.error) {
-      console.error("Authentication error:", authResult.error);
+    // Extract the authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error("Missing Authorization header");
       return new Response(
         JSON.stringify({ 
-          error: "Authentication failed",
-          details: authResult.error.message
+          error: "Authorization required",
+          details: "Authorization header is missing"
         }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    if (!authResult.data.user) {
+    const supabaseClient = createClient(supabaseUrl, supabaseKey, {
+      global: { 
+        headers: { Authorization: authHeader } 
+      }
+    });
+    
+    // Verify user authentication
+    console.log("Verifying user authentication");
+    const { data: user, error: authError } = await supabaseClient.auth.getUser();
+    
+    if (authError) {
+      console.error("Authentication error:", authError);
+      return new Response(
+        JSON.stringify({ 
+          error: "Authentication failed",
+          details: authError.message
+        }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    if (!user) {
       console.error("No authenticated user found");
       return new Response(
         JSON.stringify({ 
@@ -100,9 +111,9 @@ serve(async (req) => {
     }
     
     // Check if the authenticated user matches the requested userId
-    if (authResult.data.user.id !== userId) {
+    if (user.user.id !== userId) {
       console.error("User ID mismatch:", {
-        authenticatedId: authResult.data.user.id,
+        authenticatedId: user.user.id,
         requestedId: userId
       });
       return new Response(
@@ -137,7 +148,13 @@ serve(async (req) => {
         apiId,
         apiHash
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        status: 200, 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        } 
+      }
     );
 
   } catch (error) {
@@ -147,7 +164,13 @@ serve(async (req) => {
         error: error.message || "An unknown error occurred",
         details: "Unhandled exception in edge function"
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        status: 500, 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        } 
+      }
     );
   }
 });

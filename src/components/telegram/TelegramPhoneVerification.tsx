@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,19 +27,29 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
   
-  // Load the API credentials at component mount
   useEffect(() => {
     const loadCredentials = async () => {
       if (!user?.id) return;
       
       try {
-        // Try to get secure credentials from the edge function first
         setIsLoading(true);
         setError(null);
         
         console.log("Fetching Telegram API credentials from edge function");
+        
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        
+        if (!session) {
+          throw new Error("No active session. Please login again.");
+        }
+        
         const { data, error } = await supabase.functions.invoke('get-telegram-credentials', {
-          body: { userId: user.id }
+          body: { userId: user.id },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          }
         });
         
         if (error) {
@@ -53,7 +62,6 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
           throw new Error("Could not retrieve valid Telegram credentials");
         }
         
-        // Store in localStorage for this session
         localStorage.setItem(`telegram_api_id_${user.id}`, data.apiId);
         localStorage.setItem(`telegram_api_hash_${user.id}`, data.apiHash);
         
@@ -76,20 +84,17 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
   }, [user?.id]);
   
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Remove any non-digit characters except for the initial +
     let value = e.target.value;
     if (value.charAt(0) !== '+') {
       value = '+' + value;
     }
     
-    // Remove any non-digit characters after the + sign
     value = '+' + value.substring(1).replace(/\D/g, '');
     
     setPhone(value);
   };
   
   const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Only allow digits
     const value = e.target.value.replace(/\D/g, '');
     setCode(value);
   };
@@ -130,7 +135,6 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
       
       console.log(`Sending verification code to ${phone} for user ${user.id}`);
       
-      // Use the telegramClient to send the verification code
       const result = await telegramClient.sendCode(phone, user.id);
       
       console.log("Response from send-code:", result);
@@ -140,10 +144,8 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
         throw new Error("Failed to get verification code hash");
       }
       
-      // Store the phoneCodeHash
       setPhoneCodeHash(result.phoneCodeHash);
       
-      // Move to the code verification step
       setStep("code");
       
       toast({
@@ -182,7 +184,6 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
       
       console.log(`Verifying code for ${phone}, user ${user.id}`);
       
-      // Use the telegramClient to verify the code
       const result = await telegramClient.verifyCode(phone, code, phoneCodeHash, user.id);
       
       console.log("Response from verify-code:", result);
@@ -192,7 +193,6 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
         throw new Error("Failed to create Telegram session");
       }
       
-      // Notify parent component of successful verification
       onSuccess(result.sessionId, phone);
       
       toast({
@@ -204,7 +204,6 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
       
       setError(`Error: ${error.message}`);
       
-      // Check for specific error messages
       if (error.message.includes("PHONE_CODE_INVALID")) {
         setError("Invalid verification code. Please check and try again.");
       } else if (error.message.includes("PHONE_CODE_EXPIRED")) {
@@ -303,7 +302,16 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
               type="tel"
               placeholder="+1234567890"
               value={phone}
-              onChange={handlePhoneChange}
+              onChange={(e) => {
+                let value = e.target.value;
+                if (value.charAt(0) !== '+') {
+                  value = '+' + value;
+                }
+                
+                value = '+' + value.substring(1).replace(/\D/g, '');
+                
+                setPhone(value);
+              }}
               className="w-full"
               disabled={isLoading}
             />
@@ -321,7 +329,10 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
               type="text"
               placeholder="12345"
               value={code}
-              onChange={handleCodeChange}
+              onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, '');
+                setCode(value);
+              }}
               className="w-full"
               disabled={isLoading}
               maxLength={7}

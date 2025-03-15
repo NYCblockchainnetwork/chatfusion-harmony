@@ -13,6 +13,17 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
 
 // Create a specialized client for telegram operations
 export const telegramClient = {
+  // Helper method to get auth token
+  async getAuthHeaders() {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      throw new Error("No active session. Please login again.");
+    }
+    return {
+      Authorization: `Bearer ${data.session.access_token}`
+    };
+  },
+  
   // Get all sessions for the current user
   async getSessions(userId: string) {
     console.log(`Getting telegram sessions for user ${userId}`);
@@ -56,8 +67,13 @@ export const telegramClient = {
   // Send verification code to phone number
   async sendCode(phone: string, userId: string) {
     console.log(`Sending verification code to ${phone} for user ${userId}`);
+    
+    // Get auth headers
+    const headers = await this.getAuthHeaders();
+    
     const { data, error } = await supabase.functions.invoke('telegram-auth/send-code', {
-      body: { phone, userId }
+      body: { phone, userId },
+      headers
     });
     
     if (error) {
@@ -71,8 +87,13 @@ export const telegramClient = {
   // Verify the code and create a session
   async verifyCode(phone: string, code: string, phoneCodeHash: string, userId: string) {
     console.log(`Verifying code for ${phone}, user ${userId}`);
+    
+    // Get auth headers
+    const headers = await this.getAuthHeaders();
+    
     const { data, error } = await supabase.functions.invoke('telegram-auth/verify-code', {
-      body: { phone, code, phoneCodeHash, userId }
+      body: { phone, code, phoneCodeHash, userId },
+      headers
     });
     
     if (error) {
