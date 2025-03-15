@@ -33,9 +33,9 @@ async function fetchMessagesUsingMTProto(credentials: {
   try {
     console.log(`Attempting to fetch real messages for handle: ${handle} using MTProto API`);
     
-    // Import the GramJS library - Deno compatible version of Telegram client
-    const { TelegramClient } = await import("https://deno.land/x/gramjs@v2.19.6/mod.ts");
-    const { StringSession } = await import("https://deno.land/x/gramjs@v2.19.6/sessions/mod.ts");
+    // Use GitHub raw URL for GramJS instead of deno.land/x
+    const { TelegramClient } = await import("https://raw.githubusercontent.com/gram-js/gramjs/master/index.ts");
+    const { StringSession } = await import("https://raw.githubusercontent.com/gram-js/gramjs/master/sessions/index.ts");
     
     // Initialize the client with user credentials
     const stringSession = new StringSession(credentials.sessionString || "");
