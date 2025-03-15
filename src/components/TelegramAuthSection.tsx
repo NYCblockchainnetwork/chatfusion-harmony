@@ -94,7 +94,7 @@ const TelegramAuthSection = () => {
     try {
       console.log("Saving Telegram credentials for user:", user.id);
       
-      // First try to save API ID
+      // Save API ID first
       console.log("Saving API ID...");
       const apiIdSaved = await saveApiKey('telegram_api_id', apiId);
       
@@ -103,7 +103,7 @@ const TelegramAuthSection = () => {
         throw new Error("Failed to save API ID");
       }
       
-      // Then try to save API Hash
+      // Then save API Hash
       console.log("Saving API Hash...");
       const apiHashSaved = await saveApiKey('telegram_api_hash', apiHash);
       
