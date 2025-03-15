@@ -79,11 +79,13 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
     value = '+' + value.substring(1).replace(/\D/g, '');
     
     setPhone(value);
+    setError(null); // Clear error when user types
   };
   
   const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '');
     setCode(value);
+    setError(null); // Clear error when user types
   };
   
   const validatePhone = () => {
