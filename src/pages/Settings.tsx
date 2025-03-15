@@ -5,7 +5,7 @@ import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTelegram } from '@/contexts/TelegramContext';
 import { AlertCircle, Check } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
