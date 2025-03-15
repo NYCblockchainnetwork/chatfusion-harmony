@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
@@ -10,6 +10,7 @@ import LoadingState from "./LoadingState";
 import ErrorState from "./ErrorState";
 import { useTelegramVerification } from "@/hooks/useTelegramVerification";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "@/hooks/use-toast";
 
 interface TelegramPhoneVerificationProps {
   onSuccess: (sessionId: string, phone: string) => void;
@@ -20,7 +21,17 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
   onSuccess,
   onCancel
 }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  
+  useEffect(() => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "You must be logged in to use Telegram integration. Please log in and try again.",
+        variant: "destructive"
+      });
+    }
+  }, [isAuthenticated]);
   
   const {
     phone,
@@ -36,7 +47,7 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
     goBackToPhone
   } = useTelegramVerification({ onSuccess });
   
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !user) {
     return (
       <ErrorState 
         error="You must be logged in to use Telegram integration. Please log in and try again." 

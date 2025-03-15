@@ -41,25 +41,26 @@ serve(async (req) => {
     
     // Get Supabase URL and key from env vars
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY");  // Using anon key for auth only
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
     
-    if (!supabaseUrl || !supabaseKey) {
+    if (!supabaseUrl || !supabaseAnonKey) {
       console.error("Missing Supabase configuration");
       return createResponse({ error: "Server configuration error" }, 500);
     }
     
     try {
       // Create Supabase client
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
       
       // Verify the JWT token
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      const { data, error: authError } = await supabase.auth.getUser(token);
       
-      if (authError || !user) {
+      if (authError || !data.user) {
         console.error("Authentication error:", authError);
         return createResponse({ error: "Invalid authentication token" }, 401);
       }
       
+      const user = data.user;
       console.log("Authenticated user:", user.id);
       
       // Parse request body

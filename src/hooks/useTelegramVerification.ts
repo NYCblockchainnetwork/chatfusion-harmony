@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { telegramClient } from "@/integrations/supabase/client";
@@ -62,7 +63,9 @@ export function useTelegramVerification({ onSuccess }: UseTelegramVerificationPr
       }
     };
     
-    loadCredentials();
+    if (user?.id && isAuthenticated) {
+      loadCredentials();
+    }
   }, [user?.id, isAuthenticated]);
   
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
