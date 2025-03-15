@@ -8,7 +8,7 @@ import MessageDisplay from './telegram/MessageDisplay';
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { toast } from "@/hooks/use-toast";
-import { fetchMessagesFromHandles } from "@/utils/telegramMessages";
+import { supabase } from "@/integrations/supabase/client";
 
 // We're using a mock data approach instead of direct Telegram API
 // due to browser compatibility issues
@@ -113,14 +113,40 @@ const TelegramMessageViewer = () => {
         // Use mock data if user is not logged in
         fetchedMessages = await mockFetchMessagesFromHandles(handles, 5);
       } else {
-        // Try to use the real Telegram API
         try {
-          console.log("Attempting to fetch real Telegram messages");
-          fetchedMessages = await fetchMessagesFromHandles(handles, 5, user.id);
-          console.log("Successfully fetched real messages:", Object.keys(fetchedMessages));
+          console.log("Attempting to fetch Telegram messages via Edge Function");
+          
+          // Get stored API credentials from localStorage
+          const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
+          const apiHash = localStorage.getItem(`telegram_api_hash_${user.id}`);
+          const sessionString = localStorage.getItem(`telegram_session_${user.id}`);
+          
+          // Call the Supabase Edge Function to fetch Telegram messages
+          const { data, error } = await supabase.functions.invoke('fetch-telegram-messages', {
+            body: {
+              handles,
+              limit: 5,
+              apiId: apiId ? parseInt(apiId, 10) : undefined,
+              apiHash,
+              sessionString
+            }
+          });
+          
+          if (error) {
+            throw new Error(error.message || "Failed to fetch messages from Telegram");
+          }
+          
+          console.log("Successfully fetched messages via Edge Function");
+          
+          // Save the new session string if provided
+          if (data.sessionString && user.id) {
+            localStorage.setItem(`telegram_session_${user.id}`, data.sessionString);
+          }
+          
+          fetchedMessages = data.messages;
         } catch (error) {
-          console.error("Error fetching real messages, falling back to mock:", error);
-          // Fall back to mock data if the real API fails
+          console.error("Error fetching messages via Edge Function, falling back to mock:", error);
+          // Fall back to mock data if the edge function fails
           fetchedMessages = await mockFetchMessagesFromHandles(handles, 5);
         }
       }
