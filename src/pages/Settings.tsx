@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import Header from '@/components/Header';
@@ -10,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { validateTelegramCredentials } from "@/utils/telegramCredentialValidator";
+import TelegramAuthSection from "@/components/TelegramAuthSection";
 
 const Settings = () => {
   const { user } = useAuth();
@@ -119,10 +122,10 @@ const Settings = () => {
     } catch (error) {
       console.error("Error validating credentials:", error);
       setValidationStatus('error');
-      setValidationMessage(error instanceof Error ? error.message : "Failed to validate credentials");
+      setValidationMessage(error instanceof Error ? error.message : String(error));
       toast({
         title: "Validation Error",
-        description: error instanceof Error ? error.message : "Failed to validate credentials",
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive"
       });
     } finally {

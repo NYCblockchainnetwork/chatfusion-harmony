@@ -52,7 +52,7 @@ export async function handleQrLogin(supabase, userId) {
       qrCode: true,
       onError: (errorMessage) => {
         console.error("QR login error:", errorMessage);
-        return { error: errorMessage };
+        return { qrError: errorMessage };
       }
     });
     
