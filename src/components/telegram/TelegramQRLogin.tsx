@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +7,7 @@ import { telegramClient } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import ErrorDisplay from "./ErrorDisplay";
+import { initializedTelegramClient } from "@/utils/initTelegramClient";
 
 interface TelegramQRLoginProps {
   onSuccess: (sessionId: string) => void;
@@ -26,6 +26,8 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [pollCount, setPollCount] = useState(0);
   
+  console.log("TelegramQRLogin rendered");
+  
   // Generate a new QR code token
   const generateQRToken = useCallback(async () => {
     if (!user?.id) return;
@@ -35,7 +37,8 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({
     
     try {
       console.log("Generating QR login token...");
-      const result = await telegramClient.getQRLoginToken(user.id);
+      const client = initializedTelegramClient || telegramClient;
+      const result = await client.getQRLoginToken(user.id);
       
       if (!result || !result.token) {
         throw new Error("Failed to generate QR login token");
@@ -70,7 +73,8 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({
           setPollCount(count => count + 1);
           
           console.log(`Checking QR login status (attempt ${pollCount + 1})...`);
-          const result = await telegramClient.checkQRLoginStatus(user.id, qrToken);
+          const client = initializedTelegramClient || telegramClient;
+          const result = await client.checkQRLoginStatus(user.id, qrToken);
           
           console.log("QR login status:", result);
           
@@ -119,6 +123,7 @@ const TelegramQRLogin: React.FC<TelegramQRLoginProps> = ({
   
   // Generate QR token on component mount
   useEffect(() => {
+    console.log("TelegramQRLogin - Calling generateQRToken on mount");
     generateQRToken();
   }, [generateQRToken]);
   

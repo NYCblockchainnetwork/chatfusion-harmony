@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -312,6 +311,9 @@ const TelegramAuthSection = () => {
       </div>
     );
   };
+  
+  console.log("showPhoneVerification:", showPhoneVerification);
+  console.log("connectionStatus:", connectionStatus);
   
   return (
     <Card className="mb-6">
