@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import HandleInput from './telegram/HandleInput';
 import HandleList from './telegram/HandleList';
@@ -124,7 +124,11 @@ const TelegramMessageViewer = () => {
         throw new Error(error.message || "Failed to fetch messages from Telegram");
       }
       
-      console.log("Successfully fetched messages via Edge Function");
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      console.log("Response from Edge Function:", data);
       
       // Check if we're in mock mode
       if (data.mode === "mock") {
@@ -132,11 +136,13 @@ const TelegramMessageViewer = () => {
         console.log("Using mock Telegram data");
       } else {
         setIsMockMode(false);
+        console.log("Using live Telegram data");
       }
       
       // Save the new session string if provided
       if (data.sessionString && user.id) {
         localStorage.setItem(`telegram_session_${user.id}`, data.sessionString);
+        console.log("Updated session string saved to localStorage");
       }
       
       setMessages(data.messages);
@@ -175,8 +181,8 @@ const TelegramMessageViewer = () => {
         {isMockMode && (
           <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
             <p className="text-sm text-amber-800">
-              Using mock Telegram data. The Telegram API client is not compatible with this environment.
-              Mock messages are being displayed instead.
+              Using mock Telegram data. The Telegram API client may have encountered an error or the credentials may be invalid.
+              Check the console logs for more details.
             </p>
           </div>
         )}

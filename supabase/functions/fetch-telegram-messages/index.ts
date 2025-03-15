@@ -25,23 +25,6 @@ interface TelegramMessage {
   }
 }
 
-// Function to create mock messages for a handle
-function createMockMessage(handle: string, index: number = 0): TelegramMessage {
-  const topics = ["sports", "news", "technology", "entertainment", "business"];
-  const topic = topics[Math.floor(Math.random() * topics.length)];
-  
-  return {
-    id: index + 1,
-    text: `This is a mock message ${index + 1} about ${topic} for @${handle}. Telegram API integration is using mock data.`,
-    date: Math.floor(Date.now() / 1000) - (index * 3600), // Messages spaced 1 hour apart
-    from: {
-      username: handle,
-      firstName: 'Mock',
-      lastName: 'User'
-    }
-  };
-}
-
 // Function to create an error message
 function createErrorMessage(handle: string, error: string): TelegramMessage {
   return {
@@ -53,12 +36,6 @@ function createErrorMessage(handle: string, error: string): TelegramMessage {
       firstName: 'Error',
     }
   };
-}
-
-// Generate mock messages for a handle
-function generateMockMessages(handle: string, count: number = 5): TelegramMessage[] {
-  console.log(`Generating ${count} mock messages for @${handle}`);
-  return Array(count).fill(null).map((_, i) => createMockMessage(handle, i));
 }
 
 // Function to connect to Telegram and fetch real messages
@@ -167,14 +144,9 @@ serve(async (req) => {
 
     console.log(`Processing request for ${handles.length} handles with limit ${limit}`);
     
-    // Try to fetch real messages from Telegram
-    let result: Record<string, TelegramMessage[]> = {};
-    let newSessionString = sessionString;
-    let mode = "live";
-    
     try {
       console.log("Attempting to fetch real messages from Telegram API");
-      const response = await fetchRealTelegramMessages(
+      const { result, newSessionString } = await fetchRealTelegramMessages(
         handles, 
         limit, 
         apiIdToUse, 
@@ -182,33 +154,31 @@ serve(async (req) => {
         sessionString
       );
       
-      result = response.result;
-      newSessionString = response.newSessionString;
       console.log("Successfully fetched real messages from Telegram API");
+      
+      // Return the results with real data
+      return new Response(
+        JSON.stringify({ 
+          messages: result,
+          sessionString: newSessionString,
+          mode: "live"
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+      
     } catch (telegramError) {
-      console.warn("Failed to fetch real messages, falling back to mock data:", telegramError.message);
+      console.error("Failed to fetch real messages:", telegramError.message);
       
-      // Fallback to mock data
-      for (const handle of handles) {
-        const cleanHandle = handle.startsWith('@') ? handle.substring(1) : handle;
-        result[cleanHandle] = generateMockMessages(cleanHandle, Math.min(limit, 5));
-      }
-      
-      mode = "mock";
+      // If we encounter an error, we should return it rather than falling back to mock data
+      return new Response(
+        JSON.stringify({ 
+          error: `Telegram API Error: ${telegramError.message}`,
+          details: "Please check your API credentials and session string"
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
     
-    console.log("Completed processing request for all handles:", Object.keys(result));
-    
-    // Return the results
-    return new Response(
-      JSON.stringify({ 
-        messages: result,
-        sessionString: newSessionString,
-        mode
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-
   } catch (error) {
     console.error("Error in fetch-telegram-messages function:", error);
     return new Response(
