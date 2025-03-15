@@ -102,5 +102,32 @@ export const telegramClient = {
     }
     
     return data;
+  },
+  
+  // Get Telegram API credentials from the edge function
+  async getApiCredentials(userId: string) {
+    console.log(`Getting Telegram API credentials for user ${userId}`);
+    
+    // Get auth headers
+    const headers = await this.getAuthHeaders();
+    
+    const { data, error } = await supabase.functions.invoke('get-telegram-credentials', {
+      body: { userId },
+      headers
+    });
+    
+    if (error) {
+      console.error("Error calling get-telegram-credentials:", error);
+      throw new Error(`Failed to get credentials: ${error.message}`);
+    }
+    
+    if (!data || !data.apiId || !data.apiHash) {
+      throw new Error("Invalid credentials response from server");
+    }
+    
+    return {
+      apiId: data.apiId,
+      apiHash: data.apiHash
+    };
   }
 };

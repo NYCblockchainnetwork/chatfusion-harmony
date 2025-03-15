@@ -37,33 +37,10 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
         
         console.log("Fetching Telegram API credentials from edge function");
         
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        const credentials = await telegramClient.getApiCredentials(user.id);
         
-        if (!session) {
-          throw new Error("No active session. Please login again.");
-        }
-        
-        const { data, error } = await supabase.functions.invoke('get-telegram-credentials', {
-          body: { userId: user.id },
-          headers: {
-            Authorization: `Bearer ${session.access_token}`
-          }
-        });
-        
-        if (error) {
-          console.error("Error fetching credentials from edge function:", error);
-          throw new Error(`Failed to get credentials: ${error.message}`);
-        }
-        
-        if (!data || !data.apiId || !data.apiHash) {
-          console.error("Invalid credentials response:", data);
-          throw new Error("Could not retrieve valid Telegram credentials");
-        }
-        
-        localStorage.setItem(`telegram_api_id_${user.id}`, data.apiId);
-        localStorage.setItem(`telegram_api_hash_${user.id}`, data.apiHash);
+        localStorage.setItem(`telegram_api_id_${user.id}`, credentials.apiId);
+        localStorage.setItem(`telegram_api_hash_${user.id}`, credentials.apiHash);
         
         console.log("Successfully loaded Telegram API credentials");
         setHasLoadedCredentials(true);
@@ -302,16 +279,7 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
               type="tel"
               placeholder="+1234567890"
               value={phone}
-              onChange={(e) => {
-                let value = e.target.value;
-                if (value.charAt(0) !== '+') {
-                  value = '+' + value;
-                }
-                
-                value = '+' + value.substring(1).replace(/\D/g, '');
-                
-                setPhone(value);
-              }}
+              onChange={handlePhoneChange}
               className="w-full"
               disabled={isLoading}
             />
@@ -329,10 +297,7 @@ const TelegramPhoneVerification: React.FC<TelegramPhoneVerificationProps> = ({
               type="text"
               placeholder="12345"
               value={code}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, '');
-                setCode(value);
-              }}
+              onChange={handleCodeChange}
               className="w-full"
               disabled={isLoading}
               maxLength={7}
