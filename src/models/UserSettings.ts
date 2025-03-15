@@ -5,7 +5,8 @@ export interface UserSettings {
   notifications: boolean;
   telegramIntegrationEnabled: boolean;
   telegramChatId?: string;
-  telegramHandles?: string[]; // Added this field to store the handles
+  telegramHandles?: string[]; // Array of Telegram handles
+  activeSessionId?: string; // Added this field to store the active Telegram session ID
   pipedriveIntegrationEnabled: boolean;
   pipedriveApiKey?: string;
   lastAccessedAt: string;
