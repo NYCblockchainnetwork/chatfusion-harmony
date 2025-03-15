@@ -39,9 +39,9 @@ serve(async (req) => {
     
     // Get Supabase URL and key from env vars
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
-    if (!supabaseUrl || !supabaseKey) {
+    if (!supabaseUrl || !supabaseServiceKey) {
       console.error("Missing Supabase configuration");
       return createErrorResponse("Server configuration error", 500);
     }
@@ -51,7 +51,7 @@ serve(async (req) => {
     
     try {
       // Create Supabase client with service role key to validate the token
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
       
       // Verify the JWT token
       const { data: { user }, error: authError } = await supabase.auth.getUser(token);

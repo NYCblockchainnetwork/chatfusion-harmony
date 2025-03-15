@@ -92,17 +92,17 @@ serve(async (req) => {
       );
     }
 
-    // Import the grm library for Deno
-    let grmModule;
+    // Import the telegram library
+    let telegramModule;
     try {
-      grmModule = await import("https://deno.land/x/grm@0.0.5/mod.ts");
-      console.log("Successfully imported grm library");
+      telegramModule = await import("https://esm.sh/telegram@2.26.0");
+      console.log("Successfully imported telegram library");
     } catch (error) {
-      console.error("Error importing grm library:", error);
+      console.error("Error importing telegram library:", error);
       return createErrorResponse(`Failed to import Telegram library: ${error.message}`, 500);
     }
     
-    const { StringSession, TelegramClient } = grmModule;
+    const { StringSession, TelegramClient } = telegramModule;
     
     // If the action is "send-code", send a verification code
     if (action === "send-code") {

@@ -22,7 +22,8 @@ const LoadingState: React.FC<LoadingStateProps> = ({
     error.includes("Authentication") || 
     error.includes("auth") || 
     error.includes("logged in") ||
-    error.includes("session")
+    error.includes("session") ||
+    error.includes("token")
   );
 
   return (
@@ -36,7 +37,7 @@ const LoadingState: React.FC<LoadingStateProps> = ({
           <>
             <div className="text-destructive text-sm mb-2">
               {isAuthError 
-                ? "There was an authentication error. Please make sure you are logged in." 
+                ? "There was an authentication error. Please make sure you are logged in and try again." 
                 : "There was an error connecting to Telegram. This may be due to a server configuration issue."}
             </div>
             {onRetry && (
