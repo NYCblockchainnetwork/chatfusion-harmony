@@ -1,8 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { InfoIcon } from "lucide-react";
 import HandleInput from './telegram/HandleInput';
 import HandleList from './telegram/HandleList';
 import MessageDisplay from './telegram/MessageDisplay';
@@ -93,7 +91,7 @@ const TelegramMessageViewer = () => {
         return;
       }
       
-      console.log("Fetching Telegram messages via Edge Function");
+      console.log("Fetching Telegram messages via Edge Function using MTProto API");
       
       // Get stored API credentials from localStorage
       const apiId = localStorage.getItem(`telegram_api_id_${user.id}`);
@@ -136,7 +134,7 @@ const TelegramMessageViewer = () => {
       
       toast({
         title: "Messages Fetched",
-        description: `Retrieved messages from ${Object.keys(data.messages).length} handles`,
+        description: `Retrieved live messages from ${Object.keys(data.messages).length} handles`,
       });
     } catch (error) {
       console.error("Error fetching messages:", error);
@@ -156,14 +154,6 @@ const TelegramMessageViewer = () => {
         <CardTitle>Telegram Messages</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <Alert className="mb-4">
-          <InfoIcon className="h-4 w-4" />
-          <AlertTitle>Development Mode</AlertTitle>
-          <AlertDescription>
-            This integration is currently using simulated data. For real Telegram data, a proper bot token implementation is needed.
-          </AlertDescription>
-        </Alert>
-        
         <HandleInput onAddHandle={handleAddHandle} />
         
         <HandleList 

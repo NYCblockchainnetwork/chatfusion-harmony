@@ -25,37 +25,72 @@ interface TelegramMessage {
   }
 }
 
-// Function to call the Telegram API directly
-async function fetchTelegramMessages(credentials: {
+async function fetchMessagesUsingMTProto(credentials: {
   apiId: number;
   apiHash: string;
   sessionString?: string;
 }, handle: string, limit: number = 5): Promise<{ messages: TelegramMessage[] }> {
   try {
-    console.log(`Fetching live messages for handle: ${handle}`);
+    console.log(`Attempting to fetch real messages for handle: ${handle} using MTProto API`);
     
-    // We need to use a bot token rather than API ID/hash for this method
-    // For now, we'll create a simple mock response as we transition to using a proper bot token
-    console.log("Note: This endpoint requires a Telegram bot token for real implementation");
+    // Import the Telegram library - we use the npm version through esm.sh
+    const { TelegramClient } = await import("https://esm.sh/telegram@2.26.0");
+    const { StringSession } = await import("https://esm.sh/telegram@2.26.0/sessions");
     
-    // Mock data until bot token is implemented
-    const messages: TelegramMessage[] = [];
-    const currentTime = Math.floor(Date.now() / 1000);
+    // Initialize the client with user credentials
+    const stringSession = new StringSession(credentials.sessionString || "");
     
-    for (let i = 0; i < limit; i++) {
-      messages.push({
-        id: i + 1,
-        text: `Live message ${i + 1} for @${handle} (Note: For real data, a Telegram bot token is required)`,
-        date: currentTime - (i * 60), // Each message is 1 minute apart
+    console.log(`Creating Telegram client with API ID: ${credentials.apiId}`);
+    const client = new TelegramClient(
+      stringSession,
+      credentials.apiId,
+      credentials.apiHash,
+      {
+        connectionRetries: 3,
+        useWSS: true,
+      }
+    );
+    
+    try {
+      // Connect to Telegram
+      console.log("Connecting to Telegram...");
+      await client.connect();
+      console.log("Successfully connected to Telegram");
+      
+      // Get the entity (user/channel) by username
+      console.log(`Resolving entity for handle: ${handle}`);
+      const entity = await client.getEntity(handle.startsWith('@') ? handle : `@${handle}`);
+      console.log(`Successfully resolved entity: ${JSON.stringify(entity, null, 2)}`);
+      
+      // Get messages from the entity
+      console.log(`Fetching messages from entity...`);
+      const messages = await client.getMessages(entity, { limit });
+      console.log(`Successfully fetched ${messages.length} messages`);
+      
+      // Format messages to match our interface
+      const formattedMessages = messages.map(msg => ({
+        id: msg.id,
+        text: msg.message || "(No text content)",
+        date: msg.date,
         from: {
           username: handle,
-          firstName: handle.charAt(0).toUpperCase() + handle.slice(1),
-          lastName: undefined
+          firstName: entity.firstName || entity.title || handle,
+          lastName: entity.lastName || undefined
         }
-      });
+      }));
+      
+      // Save the session for future use
+      const newSession = stringSession.save();
+      
+      await client.disconnect();
+      return { 
+        messages: formattedMessages,
+        sessionString: newSession 
+      };
+    } catch (innerError) {
+      console.error(`Error in MTProto operation:`, innerError);
+      throw new Error(`MTProto API error: ${innerError.message}`);
     }
-    
-    return { messages };
   } catch (error) {
     console.error(`Error fetching messages for ${handle}:`, error);
     throw error;
@@ -95,25 +130,29 @@ serve(async (req) => {
     
     // Create object to store messages for each handle
     const result: Record<string, TelegramMessage[]> = {};
+    let updatedSessionString = sessionString;
     
-    // Fetch messages for each handle
+    // Fetch messages for each handle using MTProto API
     for (const handle of handles) {
       const cleanHandle = handle.startsWith('@') ? handle.substring(1) : handle;
       
       try {
-        console.log(`Processing handle: @${cleanHandle} for live data`);
+        console.log(`Processing handle: @${cleanHandle}`);
         
-        const response = await fetchTelegramMessages({
+        const response = await fetchMessagesUsingMTProto({
           apiId: apiIdToUse,
           apiHash: apiHashToUse,
-          sessionString
+          sessionString: updatedSessionString
         }, cleanHandle, limit);
         
         result[cleanHandle] = response.messages;
         
+        // Update session string if it changed
+        if (response.sessionString) {
+          updatedSessionString = response.sessionString;
+        }
       } catch (error) {
         console.error(`Error processing @${cleanHandle}:`, error);
-        // Return error in result but don't provide mock data
         result[cleanHandle] = [{
           id: 0,
           text: `Error processing @${cleanHandle}: ${error.message}`,
@@ -126,13 +165,13 @@ serve(async (req) => {
       }
     }
     
-    console.log("Completed fetching live messages for all handles:", Object.keys(result));
+    console.log("Completed fetching messages for all handles:", Object.keys(result));
     
-    // Return the results
+    // Return the results with updated session string
     return new Response(
       JSON.stringify({ 
         messages: result,
-        sessionString: sessionString // Return the same session string for now
+        sessionString: updatedSessionString
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
