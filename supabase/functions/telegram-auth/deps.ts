@@ -2,9 +2,10 @@
 export { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 export { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 
-// CACHE BUSTING: Update Telegram to newer version
-export { TelegramClient, Api } from "https://esm.sh/telegram@2.26.23";
-export { StringSession } from "https://esm.sh/telegram@2.26.23/sessions";
+// Use a more specific import URL with explicit dependencies
+export { TelegramClient } from "https://esm.sh/telegram@2.15.5?target=deno";
+export { Api } from "https://esm.sh/telegram@2.15.5?target=deno";
+export { StringSession } from "https://esm.sh/telegram@2.15.5/sessions?target=deno";
 
 // Utility logging
 export function log(message: string, ...args: any[]) {
