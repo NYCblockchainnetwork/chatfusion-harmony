@@ -19,21 +19,24 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
       sessionString: credentials.sessionString ? "provided" : "missing"
     });
     
-    const { apiId, apiHash, sessionString = "" } = credentials;
+    const { apiId, apiHash, sessionString } = credentials;
     
     if (!apiId || !apiHash) {
       throw new Error("API ID and API Hash are required");
     }
     
-    console.log("Creating StringSession with string:", sessionString ? "provided" : "empty", "Type:", typeof sessionString);
+    console.log("Creating StringSession...");
+    console.log("sessionString type:", typeof sessionString, "is null or undefined:", sessionString == null);
     
-    // Explicitly create a StringSession with the provided session string or an empty string
+    // CRITICAL FIX: Create StringSession directly with empty string literal or session string
+    // Do not use intermediate variables or conditionals that might confuse the typing
     const stringSession = new StringSession(sessionString || "");
     
-    console.log("StringSession instance created successfully");
-    console.log("Initializing Telegram client with real API");
+    console.log("StringSession created successfully, instanceof StringSession:", stringSession instanceof StringSession);
+    console.log("Initializing Telegram client...");
     
-    const client = new TelegramClient(stringSession, apiId, apiHash, {
+    // Ensure apiId is passed as a number, not a string
+    const client = new TelegramClient(stringSession, Number(apiId), apiHash, {
       connectionRetries: 3,
       useWSS: true,
     });

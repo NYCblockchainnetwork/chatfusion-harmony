@@ -1,4 +1,3 @@
-
 import { serve } from "./deps.ts";
 import { createClient, TelegramClient, StringSession, log, logError } from "./deps.ts";
 import { handleQrLogin, processQrCodeLogin } from "./qr-login.ts";
@@ -66,18 +65,15 @@ serve(async (req) => {
           log("API ID type:", typeof apiId, "Value:", apiId);
           log("API Hash type:", typeof apiHash, "Value (first 3 chars):", apiHash.substring(0, 3) + "...");
           
-          // Explicitly create an empty StringSession
-          const emptySession = "";
-          log("Empty session string:", emptySession, "Type:", typeof emptySession);
-          
-          // Explicitly initialize StringSession properly as required by Telegram.js
-          log("Creating StringSession instance...");
-          const stringSession = new StringSession(emptySession);
+          // CRITICAL FIX: Do not pre-initialize the empty session variable
+          // Directly create StringSession with empty string literal
+          log("Creating StringSession instance directly...");
+          const stringSession = new StringSession("");
           log("StringSession created:", typeof stringSession, "Is instance of StringSession:", stringSession instanceof StringSession);
           
-          // Initialize client with credentials
+          // Initialize client with credentials - cast apiId to number explicitly
           log("Creating TelegramClient instance...");
-          const client = new TelegramClient(stringSession, parseInt(apiId, 10), apiHash, {
+          const client = new TelegramClient(stringSession, Number(apiId), apiHash, {
             connectionRetries: 3,
             useWSS: true,
             baseLogger: console,
@@ -152,7 +148,7 @@ serve(async (req) => {
             
             // Save and return the session string
             const savedSession = stringSession.save();
-            log("Session saved, returning session string");
+            log("Session saved, returning session string:", savedSession ? "non-empty string" : "empty string");
             
             return createResponse({
               valid: true,

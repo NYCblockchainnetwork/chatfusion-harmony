@@ -5,9 +5,10 @@ export { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // Import Supabase client
 export { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 
-// Import telegram library
-import { TelegramClient, Api } from "https://esm.sh/telegram@2.26.22";
+// Import telegram library - specifically importing these separately
+import { TelegramClient } from "https://esm.sh/telegram@2.26.22";
 import { StringSession } from "https://esm.sh/telegram@2.26.22/sessions";
+import { Api } from "https://esm.sh/telegram@2.26.22";
 
 // Re-export the telegram imports
 export { TelegramClient, Api, StringSession };
