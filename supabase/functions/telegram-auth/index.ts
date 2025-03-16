@@ -62,9 +62,18 @@ serve(async (req) => {
             }, 400);
           }
           
+          // Debug info for StringSession
+          log("API ID type:", typeof apiId, "Value:", apiId);
+          log("API Hash type:", typeof apiHash, "Value (first 3 chars):", apiHash.substring(0, 3) + "...");
+          
+          // Explicitly create an empty StringSession
+          const emptySession = "";
+          log("Empty session string:", emptySession, "Type:", typeof emptySession);
+          
           // Explicitly initialize StringSession properly as required by Telegram.js
           log("Creating StringSession instance...");
-          const stringSession = new StringSession(""); // Empty session string
+          const stringSession = new StringSession(emptySession);
+          log("StringSession created:", typeof stringSession, "Is instance of StringSession:", stringSession instanceof StringSession);
           
           // Initialize client with credentials
           log("Creating TelegramClient instance...");
@@ -141,23 +150,29 @@ serve(async (req) => {
               }
             }
             
+            // Save and return the session string
+            const savedSession = stringSession.save();
+            log("Session saved, returning session string");
+            
             return createResponse({
               valid: true,
               message: "Credentials valid and successfully connected to Telegram",
-              session: stringSession.save()
+              session: savedSession
             });
           } catch (connectErr) {
             logError("Error connecting to Telegram", connectErr);
             return createResponse({
               valid: false,
-              error: "Failed to connect to Telegram: " + (connectErr.message || "Unknown error")
+              error: "Failed to connect to Telegram: " + (connectErr.message || "Unknown error"),
+              stack: connectErr.stack
             }, 400);
           }
         } catch (validationErr) {
           logError("Error validating credentials", validationErr);
           return createResponse({
             valid: false,
-            error: validationErr.message || "Invalid credentials"
+            error: validationErr.message || "Invalid credentials",
+            stack: validationErr.stack
           }, 400);
         }
       }
@@ -191,7 +206,10 @@ serve(async (req) => {
   } catch (error) {
     logError("Error in telegram-auth function", error);
     return new Response(
-      JSON.stringify({ error: `Server error: ${error.message}` }),
+      JSON.stringify({ 
+        error: `Server error: ${error.message}`,
+        stack: error.stack 
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,

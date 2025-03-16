@@ -25,10 +25,14 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
       throw new Error("API ID and API Hash are required");
     }
     
-    // Create a StringSession with the provided session string
-    const stringSession = new StringSession(sessionString);
+    console.log("Creating StringSession with string:", sessionString ? "provided" : "empty", "Type:", typeof sessionString);
     
+    // Explicitly create a StringSession with the provided session string or an empty string
+    const stringSession = new StringSession(sessionString || "");
+    
+    console.log("StringSession instance created successfully");
     console.log("Initializing Telegram client with real API");
+    
     const client = new TelegramClient(stringSession, apiId, apiHash, {
       connectionRetries: 3,
       useWSS: true,
