@@ -67,8 +67,8 @@ serve(async (req) => {
           log("API Hash:", apiHash.substring(0, 3) + "...", "type:", typeof apiHash);
           
           try {
-            // IMPORTANT: The StringSession constructor MUST receive a string
-            // Create it directly without intermediate variables that might confuse types
+            // Create a new StringSession with an empty string
+            // CRITICALLY IMPORTANT: Create StringSession directly with an empty string
             log("Creating StringSession with empty string");
             const stringSession = new StringSession("");
             
@@ -76,11 +76,15 @@ serve(async (req) => {
                 "type:", typeof stringSession, 
                 "instanceof StringSession:", stringSession instanceof StringSession);
             
-            // Number() ensures apiId is a number, not a string
+            // Convert apiId to number explicitly
+            const apiIdNum = Number(apiId);
+            log("API ID converted to number:", apiIdNum);
+            
+            // Create TelegramClient with the StringSession
             log("Creating TelegramClient");
             const client = new TelegramClient(
               stringSession,
-              Number(apiId),
+              apiIdNum,
               apiHash,
               {
                 connectionRetries: 3,

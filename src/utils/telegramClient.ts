@@ -27,35 +27,36 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
     
     console.log("Creating StringSession...");
     
-    // Debug session string value
-    if (sessionString) {
-      console.log("Session string provided:", typeof sessionString, "length:", sessionString.length);
-      // Check if session string was accidentally JSON-stringified
-      try {
-        const parsed = JSON.parse(sessionString);
-        console.error("WARNING: Session string appears to be JSON. This is likely incorrect:", parsed);
-        // Continue anyway, as StringSession will handle this, but log the warning
-      } catch (e) {
-        // Not JSON, which is good
-        console.log("Session string is not JSON (expected)");
-      }
-    } else {
-      console.log("No session string provided, using empty string");
-    }
-    
-    // Ensure sessionString is a plain string, not an object or null
+    // Ensure sessionString is a plain string, not null or undefined
     const safeSessionString = typeof sessionString === 'string' ? sessionString : "";
     
-    // Create StringSession directly with the session string or empty string
+    // Debug session string value
+    console.log("Session string (safe):", 
+        "type:", typeof safeSessionString, 
+        "length:", safeSessionString.length,
+        "value:", safeSessionString.substring(0, 5) + "...");
+    
+    // Create StringSession with the string
     const stringSession = new StringSession(safeSessionString);
     
-    console.log("StringSession created successfully, instanceof StringSession:", stringSession instanceof StringSession);
+    console.log("StringSession created successfully:", 
+        "type:", typeof stringSession, 
+        "instanceof StringSession:", stringSession instanceof StringSession);
+    
     console.log("Initializing Telegram client...");
     
-    // Make sure apiId is passed as a number
-    const client = new TelegramClient(stringSession, Number(apiId), apiHash, {
+    // Make sure apiId is a number
+    const apiIdNum = Number(apiId);
+    console.log("API ID as number:", apiIdNum);
+    
+    // Create the TelegramClient
+    const client = new TelegramClient(stringSession, apiIdNum, apiHash, {
       connectionRetries: 3,
       useWSS: true,
+      deviceModel: "Web Client",
+      systemVersion: "Browser", 
+      appVersion: "1.0.0",
+      langCode: "en"
     });
     
     return {

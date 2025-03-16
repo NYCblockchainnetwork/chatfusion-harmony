@@ -8,8 +8,10 @@ export { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 // Import telegram library - directly import from the main telegram package
 // This is CRITICAL - import StringSession directly from telegram/sessions
 import { TelegramClient } from "https://esm.sh/telegram@2.26.22";
-import { StringSession } from "https://esm.sh/telegram@2.26.22/sessions";
 import { Api } from "https://esm.sh/telegram@2.26.22";
+
+// Import the StringSession class correctly
+import { StringSession } from "https://esm.sh/telegram@2.26.22/sessions";
 
 // Re-export the telegram imports
 export { TelegramClient, Api, StringSession };
