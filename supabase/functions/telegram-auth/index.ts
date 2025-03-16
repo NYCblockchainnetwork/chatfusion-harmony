@@ -62,7 +62,7 @@ serve(async (req) => {
             }, 400);
           }
           
-          // Create string session
+          // Create string session - explicitly initialize as empty string
           log("Creating StringSession instance...");
           const session = new StringSession("");
           
