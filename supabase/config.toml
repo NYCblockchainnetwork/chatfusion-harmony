@@ -105,7 +105,7 @@ backend = "postgres"
 # Port to use for the Functions API URL.
 port = 54321
 
-# Define individual edge functions here
+# Define individual edge functions using the correct syntax with double brackets
 [[functions.function]]
 name = "telegram-auth"
 verify_jwt = false
