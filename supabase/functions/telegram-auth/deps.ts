@@ -28,4 +28,5 @@ export function logError(message: string, error: any) {
   console.error(`[${timestamp}] ERROR: ${message}`, error);
 }
 
-console.log("GRM dependencies loaded successfully");
+// Ensure GRM is properly initialized
+console.log("Initializing GRM dependencies...");
