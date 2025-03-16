@@ -1,10 +1,17 @@
 
 // Custom session implementation for Telegram client in Deno environment
+// This is a StringSession compatible implementation
 export class CustomStringSession {
   private _session: string;
 
   constructor(session = "") {
     this._session = session;
+  }
+
+  // Method to check if this is a valid StringSession
+  // This helps the Telegram client identify this as a proper StringSession
+  get _databaseKey() {
+    return "string";
   }
 
   // Standard methods required for the session interface
@@ -16,16 +23,17 @@ export class CustomStringSession {
     this._session = session;
   }
 
-  // Extra methods to ensure compatibility
-  getString() {
+  // Returns the string representation of the session
+  toString(): string {
     return this._session;
   }
 
-  setString(value: string) {
-    this._session = value;
+  // Method to explicitly identify this as a StringSession
+  get classType() {
+    return "string";
   }
 
-  // Specific methods required for the StringSession interface
+  // Essential methods for StringSession compatibility
   getSession() {
     return this._session;
   }
@@ -39,10 +47,25 @@ export class CustomStringSession {
     return "string";
   }
 
+  // Helper methods for easier usage
+  getString() {
+    return this._session;
+  }
+
+  setString(value: string) {
+    this._session = value;
+  }
+
+  // Required for JSON serialization
   toJSON() {
     return {
       sessionType: "string",
       session: this._session
     };
+  }
+  
+  // Required for detection as a StringSession
+  static isAvailable() {
+    return true;
   }
 }
