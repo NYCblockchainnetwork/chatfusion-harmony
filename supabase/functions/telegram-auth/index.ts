@@ -62,14 +62,13 @@ serve(async (req) => {
             }, 400);
           }
           
-          // Create string session - IMPORTANT: explicit initialization as required by Telegram.js
+          // Explicitly initialize StringSession properly as required by Telegram.js
           log("Creating StringSession instance...");
-          const sessionString = "";  // Start with empty session string
-          const session = new StringSession(sessionString);
+          const stringSession = new StringSession(""); // Empty session string
           
           // Initialize client with credentials
           log("Creating TelegramClient instance...");
-          const client = new TelegramClient(session, parseInt(apiId, 10), apiHash, {
+          const client = new TelegramClient(stringSession, parseInt(apiId, 10), apiHash, {
             connectionRetries: 3,
             useWSS: true,
             baseLogger: console,
@@ -145,7 +144,7 @@ serve(async (req) => {
             return createResponse({
               valid: true,
               message: "Credentials valid and successfully connected to Telegram",
-              session: session.save()
+              session: stringSession.save()
             });
           } catch (connectErr) {
             logError("Error connecting to Telegram", connectErr);

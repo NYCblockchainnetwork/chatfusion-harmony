@@ -25,7 +25,7 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
       throw new Error("API ID and API Hash are required");
     }
     
-    // Create a real Telegram client using telegram.js
+    // Create a StringSession with the provided session string
     const stringSession = new StringSession(sessionString);
     
     console.log("Initializing Telegram client with real API");
