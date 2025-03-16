@@ -72,6 +72,5 @@ redirect_uri = ""
 # or any other third-party OIDC providers.
 url = ""
 
-[[functions]]
-name = "telegram-auth"
+[functions.telegram-auth]
 verify_jwt = false
