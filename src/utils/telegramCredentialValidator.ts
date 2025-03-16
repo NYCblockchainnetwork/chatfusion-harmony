@@ -49,12 +49,22 @@ export async function validateTelegramCredentials(
     
     if (error) {
       console.error("Error invoking Telegram auth function:", error);
+      toast({
+        title: "Service Error",
+        description: error.message,
+        variant: "destructive"
+      });
       return { valid: false, message: `Service error: ${error.message}` };
     }
     
-    if (!data.valid) {
+    if (!data || !data.valid) {
       console.error("Invalid credentials response:", data);
-      return { valid: false, message: data.error || "Invalid credentials" };
+      toast({
+        title: "Validation Failed",
+        description: data?.error || "Invalid credentials",
+        variant: "destructive"
+      });
+      return { valid: false, message: data?.error || "Invalid credentials" };
     }
     
     // Save to localStorage for quick access
@@ -63,12 +73,22 @@ export async function validateTelegramCredentials(
       localStorage.setItem(`telegram_api_hash_${userId}`, apiHash);
     }
     
+    toast({
+      title: "Validation Successful",
+      description: data.message || "Credentials validated successfully"
+    });
+    
     return { 
       valid: true, 
       message: data.message || "Credentials validated successfully" 
     };
   } catch (error) {
     console.error("Error validating Telegram credentials:", error);
+    toast({
+      title: "Validation Error",
+      description: error.message || "Failed to validate credentials",
+      variant: "destructive"
+    });
     return { 
       valid: false, 
       message: error.message || "Failed to validate credentials" 
