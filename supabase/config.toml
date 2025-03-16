@@ -109,4 +109,3 @@ port = 54321
 [[functions.function]]
 name = "telegram-auth"
 verify_jwt = false
-
