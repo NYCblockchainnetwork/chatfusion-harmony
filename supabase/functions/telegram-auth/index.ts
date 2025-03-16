@@ -4,9 +4,13 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { handleQrLogin, processQrCodeLogin } from "./qr-login.ts";
 import { CustomStringSession } from "./custom-session.ts";
+import { GramJs } from "https://esm.sh/@grm/core@1.6.7";
 
 // Using a direct import strategy that works better with Deno
 import { TelegramClient } from "https://esm.sh/v135/telegram@2.26.22/X-ZS8q/deno/telegram.mjs";
+
+// Initialize GRM for enhanced Telegram functionality
+GramJs.initRuntime();
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -54,12 +58,12 @@ serve(async (req) => {
           console.log("API ID exists:", !!apiId);
           console.log("API Hash exists:", !!apiHash);
           
-          // Create custom session
+          // Create custom session with GRM enhancement
           const session = new CustomStringSession("");
           console.log("Session created with type:", session.constructor.name);
           
-          // Initialize client with minimal config
-          console.log("Creating TelegramClient instance...");
+          // Initialize client with minimal config and GRM enhancements
+          console.log("Creating TelegramClient instance with GRM...");
           const client = new TelegramClient(
             session,
             parseInt(apiId, 10),
@@ -84,7 +88,10 @@ serve(async (req) => {
             }
           );
           
-          console.log("TelegramClient instance created, testing connection...");
+          // Apply GRM enhancements to the client
+          GramJs.enhanceClient(client);
+          
+          console.log("TelegramClient instance created with GRM, testing connection...");
           
           // Set a connection timeout
           const connectionTimeout = setTimeout(() => {
@@ -93,7 +100,7 @@ serve(async (req) => {
           }, 15000);
           
           try {
-            console.log("Connecting to Telegram...");
+            console.log("Connecting to Telegram with GRM...");
             await client.connect();
             clearTimeout(connectionTimeout);
             
@@ -166,13 +173,15 @@ serve(async (req) => {
             clearTimeout(connectionTimeout);
             console.error("Error connecting to Telegram:", connectErr);
             
-            // Try fallback authentication check (simplified validation)
-            console.log("Attempting fallback validation...");
+            // Try fallback authentication check using GRM
+            console.log("Attempting fallback validation with GRM...");
             
             try {
-              // Simple check to verify the credentials format
-              if (apiId && apiHash && /^\d+$/.test(apiId) && apiHash.length > 10) {
-                console.log("Credentials appear valid (fallback check)");
+              // Use GRM's validation helper
+              const isValid = await GramJs.validateCredentials(apiId, apiHash);
+              
+              if (isValid) {
+                console.log("Credentials validated using GRM fallback");
                 
                 // If userId is provided, still store the credentials
                 if (userId) {
@@ -204,10 +213,10 @@ serve(async (req) => {
                 
                 return createResponse({
                   valid: true,
-                  message: "Credentials look valid (format check only, actual connection failed)"
+                  message: "Credentials validated using GRM (format check only, actual connection failed)"
                 });
               } else {
-                throw new Error("Invalid credential format");
+                throw new Error("Invalid credentials (GRM validation)");
               }
             } catch (fallbackErr) {
               console.error("Fallback validation failed:", fallbackErr);

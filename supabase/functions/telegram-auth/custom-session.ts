@@ -1,15 +1,21 @@
 
-// Custom session implementation for Telegram client in Deno environment
-// This is a StringSession compatible implementation
-export class CustomStringSession {
+// Custom session implementation using GRM for Telegram client in Deno environment
+// This is a StringSession compatible implementation based on GRM's recommended patterns
+
+import { StringSession } from "https://esm.sh/telegram@2.26.22/sessions";
+import { GramJs } from "https://esm.sh/@grm/core@1.6.7";
+
+export class CustomStringSession extends StringSession {
   private _session: string;
 
   constructor(session = "") {
-    this._session = session;
+    super();
+    this._session = session || "";
+    // Initialize GRM for better session handling
+    GramJs.initSession(this);
   }
 
   // Method to check if this is a valid StringSession
-  // This helps the Telegram client identify this as a proper StringSession
   get _databaseKey() {
     return "string";
   }
@@ -69,15 +75,47 @@ export class CustomStringSession {
     return true;
   }
   
-  // Additional compatibility methods
+  // Enhanced encode and decode methods using GRM's utilities
   encode(data: any): string {
-    if (typeof data === 'string') {
-      return data;
+    try {
+      if (typeof data === 'string') {
+        return data;
+      }
+      
+      // Use GRM's encoding utilities if available
+      if (GramJs.Utils && GramJs.Utils.encodeSession) {
+        return GramJs.Utils.encodeSession(data);
+      }
+      
+      // Fallback to JSON stringification
+      if (data && typeof data === 'object') {
+        return JSON.stringify(data);
+      }
+      
+      return String(data || '');
+    } catch (e) {
+      console.error("Session encode error:", e);
+      return '';
     }
-    return '';
   }
   
   decode(encoded: string): any {
-    return encoded;
+    try {
+      // Use GRM's decoding utilities if available
+      if (GramJs.Utils && GramJs.Utils.decodeSession) {
+        return GramJs.Utils.decodeSession(encoded);
+      }
+      
+      // Try to parse as JSON
+      try {
+        return JSON.parse(encoded);
+      } catch (e) {
+        // If not JSON, return as is
+        return encoded;
+      }
+    } catch (e) {
+      console.error("Session decode error:", e);
+      return encoded;
+    }
   }
 }

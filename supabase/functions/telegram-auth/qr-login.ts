@@ -1,6 +1,7 @@
 
 import { CustomStringSession } from "./custom-session.ts";
 import QRCode from "https://esm.sh/qrcode@1.5.3";
+import { GramJs } from "https://esm.sh/@grm/core@1.6.7";
 
 // Using a direct import strategy that works better with Deno
 import { TelegramClient } from "https://esm.sh/v135/telegram@2.26.22/X-ZS8q/deno/telegram.mjs";
@@ -41,7 +42,7 @@ export async function handleQrLogin(supabase, userId) {
     // Initialize Telegram client with custom session
     console.log("Initializing Telegram client with API ID:", apiId);
     
-    // Create custom session
+    // Create custom session with GRM enhancement
     const session = new CustomStringSession("");
     console.log("QR login: Session created with type:", session.constructor.name);
 
@@ -70,6 +71,9 @@ export async function handleQrLogin(supabase, userId) {
       }
     );
     
+    // Apply GRM enhancements to the client
+    GramJs.enhanceClient(client);
+    
     try {
       // Set a connection timeout
       const connectionTimeout = setTimeout(() => {
@@ -84,15 +88,28 @@ export async function handleQrLogin(supabase, userId) {
         
         console.log("QR login: Connected to Telegram");
         
-        // Generate QR login data
-        console.log("Generating QR login token...");
-        const { token, expires } = await client.qrLogin({ 
-          qrCode: true,
-          onError: (errorMessage) => {
-            console.error("QR login error:", errorMessage);
-            return { qrError: errorMessage };
-          }
-        });
+        // Generate QR login data with GRM's enhanced QR login method
+        console.log("Generating QR login token with GRM...");
+        let token;
+        let expires;
+        
+        // Try to use GRM's enhanced QR login if available
+        if (GramJs.generateQrLogin) {
+          const qrData = await GramJs.generateQrLogin(client);
+          token = qrData.token;
+          expires = qrData.expires;
+        } else {
+          // Fallback to standard QR login
+          const qrData = await client.qrLogin({ 
+            qrCode: true,
+            onError: (errorMessage) => {
+              console.error("QR login error:", errorMessage);
+              return { qrError: errorMessage };
+            }
+          });
+          token = qrData.token;
+          expires = qrData.expires;
+        }
         
         console.log("QR login token generated:", !!token);
         console.log("QR login token expires in:", expires, "seconds");
@@ -193,9 +210,9 @@ export async function processQrCodeLogin(supabase, userId, token) {
     const apiHash = apiHashData.api_key;
     
     // Create client with saved session
-    console.log("Restoring session from saved state...");
+    console.log("Restoring session from saved state with GRM...");
     
-    // Initialize with custom session handler
+    // Initialize with custom session handler enhanced by GRM
     const session = new CustomStringSession(loginState.session_string);
     
     // Create the client with proper configuration for Deno environment
@@ -223,6 +240,9 @@ export async function processQrCodeLogin(supabase, userId, token) {
       }
     );
     
+    // Apply GRM enhancements to the client
+    GramJs.enhanceClient(client);
+    
     try {
       // Set a connection timeout
       const connectionTimeout = setTimeout(() => {
@@ -231,14 +251,20 @@ export async function processQrCodeLogin(supabase, userId, token) {
       }, 15000);
       
       try {
-        console.log("QR check: Connecting to Telegram...");
+        console.log("QR check: Connecting to Telegram with GRM...");
         await client.connect();
         clearTimeout(connectionTimeout);
         
-        console.log("Connected to Telegram with saved session");
+        console.log("Connected to Telegram with saved session (GRM enhanced)");
         
-        // Check authorization status
-        const isAuthorized = await client.isUserAuthorized();
+        // Check authorization status with GRM's enhanced method if available
+        let isAuthorized;
+        if (GramJs.checkAuthorization) {
+          isAuthorized = await GramJs.checkAuthorization(client);
+        } else {
+          isAuthorized = await client.isUserAuthorized();
+        }
+        
         console.log("User authorization status:", isAuthorized);
         
         if (isAuthorized) {
