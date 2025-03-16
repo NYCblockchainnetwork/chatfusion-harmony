@@ -1,20 +1,31 @@
 
-// Dependencies file for Telegram authentication
-// This file ensures all necessary libraries are properly imported and initialized
+// Import the Deno standard library HTTP server
+export { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-// Import the GRM core library
-export { GramJs } from "https://esm.sh/@grm/core@1.6.7";
+// Import Supabase client
+export { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 
-// Import additional GRM modules that might be useful
-export { ApiManager } from "https://esm.sh/@grm/api@1.6.5";
-export { SessionManager } from "https://esm.sh/@grm/session@1.6.2";
+// Import GRM (Gram JS for Deno)
+export { 
+  TelegramClient,
+  StringSession,
+  Api,
+  utils
+} from "https://deno.land/x/grm@0.0.4/mod.ts";
 
-// Re-export Telegram core classes for convenience
-export { TelegramClient } from "https://esm.sh/v135/telegram@2.26.22/X-ZS8q/deno/telegram.mjs";
-export { StringSession } from "https://esm.sh/telegram@2.26.22/sessions";
+// Import QR code library for login functionality
+export { default as QRCode } from "https://esm.sh/qrcode@1.5.3";
 
-// Initialize GRM
-import { GramJs } from "https://esm.sh/@grm/core@1.6.7";
-GramJs.initRuntime();
+// Export a helper function to log info with timestamps
+export function log(message: string, ...args: any[]) {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${message}`, ...args);
+}
 
-console.log("GRM library and dependencies initialized");
+// Export error logging helper
+export function logError(message: string, error: any) {
+  const timestamp = new Date().toISOString();
+  console.error(`[${timestamp}] ERROR: ${message}`, error);
+}
+
+console.log("GRM dependencies loaded successfully");

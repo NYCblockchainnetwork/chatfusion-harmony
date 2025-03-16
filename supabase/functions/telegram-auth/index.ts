@@ -1,16 +1,7 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve, createClient, TelegramClient, StringSession, log, logError } from "./deps.ts";
 import { corsHeaders } from "../_shared/cors.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { handleQrLogin, processQrCodeLogin } from "./qr-login.ts";
-import { CustomStringSession } from "./custom-session.ts";
-import { GramJs } from "https://esm.sh/@grm/core@1.6.7";
-
-// Using a direct import strategy that works better with Deno
-import { TelegramClient } from "https://esm.sh/v135/telegram@2.26.22/X-ZS8q/deno/telegram.mjs";
-
-// Initialize GRM for enhanced Telegram functionality
-GramJs.initRuntime();
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -26,7 +17,7 @@ serve(async (req) => {
     const body = await req.json();
     const { userId, token, method, apiId, apiHash } = body;
 
-    console.log("Telegram Auth function called with method:", method);
+    log(`Telegram Auth function called with method: ${method}`);
     
     // Create response with CORS headers
     const createResponse = (data: any, status = 200) => {
@@ -40,13 +31,13 @@ serve(async (req) => {
     switch (method) {
       case "validate-credentials":
         if (!apiId || !apiHash) {
-          console.error("Missing credentials");
+          logError("Missing credentials", { apiId: !!apiId, apiHash: !!apiHash });
           return createResponse({ error: "API ID and API Hash are required" }, 400);
         }
         
         // Validate API ID format
         if (!/^\d+$/.test(apiId)) {
-          console.error("Invalid API ID format");
+          logError("Invalid API ID format", { apiId });
           return createResponse({
             valid: false,
             error: "API ID must be a valid number"
@@ -54,61 +45,49 @@ serve(async (req) => {
         }
         
         try {
-          console.log("Validating Telegram credentials...");
-          console.log("API ID exists:", !!apiId);
-          console.log("API Hash exists:", !!apiHash);
+          log("Validating Telegram credentials...");
+          log("API ID exists:", !!apiId);
+          log("API Hash exists:", !!apiHash);
           
-          // Create custom session with GRM enhancement
-          const session = new CustomStringSession("");
-          console.log("Session created with type:", session.constructor.name);
+          // Create GRM session
+          const session = new StringSession("");
+          log("Session created with type:", session.constructor.name);
           
-          // Initialize client with minimal config and GRM enhancements
-          console.log("Creating TelegramClient instance with GRM...");
+          // Initialize GRM client with proper configuration
+          log("Creating TelegramClient instance with GRM...");
           const client = new TelegramClient(
-            session,
-            parseInt(apiId, 10),
-            apiHash,
+            session, 
+            parseInt(apiId, 10), 
+            apiHash, 
             {
               connectionRetries: 3,
               useWSS: true,
               baseLogger: console,
-              deviceModel: "Deno Edge Function",
-              systemVersion: "Windows",
+              deviceModel: "Edge Function",
+              systemVersion: "Deno",
               appVersion: "1.0.0",
-              langCode: "en",
-              systemLangCode: "en",
-              initConnectionParams: {
-                apiId: parseInt(apiId, 10),
-                deviceModel: "Deno Edge Function",
-                systemVersion: "Windows",
-                appVersion: "1.0.0",
-                langCode: "en",
-                systemLangCode: "en",
-              }
+              langCode: "en"
             }
           );
           
-          // Apply GRM enhancements to the client
-          GramJs.enhanceClient(client);
-          
-          console.log("TelegramClient instance created with GRM, testing connection...");
+          log("TelegramClient instance created, testing connection...");
           
           // Set a connection timeout
           const connectionTimeout = setTimeout(() => {
-            console.error("Connection timeout after 15 seconds");
+            logError("Connection timeout after 15 seconds", {});
             client.disconnect();
           }, 15000);
           
           try {
-            console.log("Connecting to Telegram with GRM...");
+            log("Connecting to Telegram...");
             await client.connect();
             clearTimeout(connectionTimeout);
             
-            console.log("Successfully connected to Telegram");
+            log("Successfully connected to Telegram");
             
             // Test if we're actually connected
             const isConnected = await client.isConnected();
-            console.log("Connection test result:", isConnected);
+            log("Connection test result:", isConnected);
             
             if (!isConnected) {
               throw new Error("Failed to connect to Telegram");
@@ -116,10 +95,10 @@ serve(async (req) => {
             
             // Save the session string for debugging
             const sessionString = session.save();
-            console.log("Session string generated:", !!sessionString);
+            log("Session string generated:", !!sessionString);
             
             await client.disconnect();
-            console.log("Client disconnected successfully");
+            log("Client disconnected successfully");
             
             // If we reached here, credentials are valid
             // Store them in Supabase user_api_keys table if userId is provided
@@ -138,10 +117,10 @@ serve(async (req) => {
                 );
               
               if (apiIdError) {
-                console.error("Error storing API ID:", apiIdError);
+                logError("Error storing API ID:", apiIdError);
                 // Continue anyway, this is not critical
               } else {
-                console.log("API ID stored successfully");
+                log("API ID stored successfully");
               }
               
               // Store API Hash
@@ -158,76 +137,32 @@ serve(async (req) => {
                 );
               
               if (apiHashError) {
-                console.error("Error storing API Hash:", apiHashError);
+                logError("Error storing API Hash:", apiHashError);
                 // Continue anyway, this is not critical
               } else {
-                console.log("API Hash stored successfully");
+                log("API Hash stored successfully");
               }
             }
             
             return createResponse({ 
               valid: true, 
-              message: "Credentials valid and successfully connected to Telegram" 
+              message: "Credentials valid and successfully connected to Telegram",
+              session: sessionString
             });
           } catch (connectErr) {
             clearTimeout(connectionTimeout);
-            console.error("Error connecting to Telegram:", connectErr);
+            logError("Error connecting to Telegram:", connectErr);
             
-            // Try fallback authentication check using GRM
-            console.log("Attempting fallback validation with GRM...");
-            
-            try {
-              // Use GRM's validation helper
-              const isValid = await GramJs.validateCredentials(apiId, apiHash);
-              
-              if (isValid) {
-                console.log("Credentials validated using GRM fallback");
-                
-                // If userId is provided, still store the credentials
-                if (userId) {
-                  // Store API ID and API Hash (same code as above)
-                  await supabase
-                    .from("user_api_keys")
-                    .upsert(
-                      {
-                        user_id: userId,
-                        service: "telegram_api_id",
-                        api_key: apiId,
-                        updated_at: new Date().toISOString(),
-                      },
-                      { onConflict: "user_id,service" }
-                    );
-                  
-                  await supabase
-                    .from("user_api_keys")
-                    .upsert(
-                      {
-                        user_id: userId,
-                        service: "telegram_api_hash",
-                        api_key: apiHash,
-                        updated_at: new Date().toISOString(),
-                      },
-                      { onConflict: "user_id,service" }
-                    );
-                }
-                
-                return createResponse({
-                  valid: true,
-                  message: "Credentials validated using GRM (format check only, actual connection failed)"
-                });
-              } else {
-                throw new Error("Invalid credentials (GRM validation)");
-              }
-            } catch (fallbackErr) {
-              console.error("Fallback validation failed:", fallbackErr);
-              return createResponse({
-                valid: false,
-                error: "Failed to validate credentials: " + (connectErr.message || "Connection error")
-              }, 400);
-            }
+            // Fallback to basic validation
+            // With GRM, there's no need for a separate validation step since
+            // we already tried to connect. If it failed, the credentials are invalid.
+            return createResponse({
+              valid: false,
+              error: "Failed to connect to Telegram: " + (connectErr.message || "Unknown error")
+            }, 400);
           }
         } catch (validationErr) {
-          console.error("Error validating credentials:", validationErr);
+          logError("Error validating credentials:", validationErr);
           return createResponse({
             valid: false,
             error: validationErr.message || "Invalid credentials"
@@ -239,7 +174,7 @@ serve(async (req) => {
           return createResponse({ error: "User ID is required" }, 400);
         }
         
-        console.log("Getting QR token for user:", userId);
+        log("Getting QR token for user:", userId);
         const qrToken = await handleQrLogin(supabase, userId);
         return createResponse(qrToken);
 
@@ -248,16 +183,16 @@ serve(async (req) => {
           return createResponse({ error: "User ID and token are required" }, 400);
         }
         
-        console.log("Checking QR status for token:", token);
+        log("Checking QR status for token:", token);
         const status = await processQrCodeLogin(supabase, userId, token);
         return createResponse(status);
       
       default:
-        console.log("Invalid method:", method);
+        log("Invalid method:", method);
         return createResponse({ error: "Invalid method" }, 400);
     }
   } catch (error) {
-    console.error("Error in telegram-auth function:", error.message);
+    logError("Error in telegram-auth function:", error);
     return new Response(
       JSON.stringify({ error: `Server error: ${error.message}` }),
       {
