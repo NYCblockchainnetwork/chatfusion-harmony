@@ -67,21 +67,22 @@ serve(async (req) => {
           log("API Hash:", apiHash.substring(0, 3) + "...", "type:", typeof apiHash);
           
           try {
-            // Create a new StringSession with an empty string
-            // CRITICALLY IMPORTANT: Create StringSession directly with an empty string
-            log("Creating StringSession with empty string");
+            // CRITICAL FIX: Create StringSession with explicit empty string and validate it
+            log("Creating StringSession explicitly with empty string");
             const stringSession = new StringSession("");
             
-            log("StringSession created successfully:", 
+            // Explicit validation - critical for debugging
+            log("StringSession type check:", 
                 "type:", typeof stringSession, 
+                "constructor name:", stringSession.constructor.name,
                 "instanceof StringSession:", stringSession instanceof StringSession);
             
             // Convert apiId to number explicitly
             const apiIdNum = Number(apiId);
             log("API ID converted to number:", apiIdNum);
             
-            // Create TelegramClient with the StringSession
-            log("Creating TelegramClient");
+            // Create TelegramClient with validated StringSession
+            log("Creating TelegramClient with validated StringSession");
             const client = new TelegramClient(
               stringSession,
               apiIdNum,

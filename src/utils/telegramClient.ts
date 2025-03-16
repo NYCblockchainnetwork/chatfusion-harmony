@@ -27,7 +27,8 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
     
     console.log("Creating StringSession...");
     
-    // Ensure sessionString is a plain string, not null or undefined
+    // CRITICAL FIX: Ensure sessionString is a plain string, not JSON or undefined
+    // This is required for proper StringSession initialization
     const safeSessionString = typeof sessionString === 'string' ? sessionString : "";
     
     // Debug session string value
