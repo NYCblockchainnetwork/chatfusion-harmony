@@ -68,4 +68,16 @@ export class CustomStringSession {
   static isAvailable() {
     return true;
   }
+  
+  // Additional compatibility methods
+  encode(data: any): string {
+    if (typeof data === 'string') {
+      return data;
+    }
+    return '';
+  }
+  
+  decode(encoded: string): any {
+    return encoded;
+  }
 }
