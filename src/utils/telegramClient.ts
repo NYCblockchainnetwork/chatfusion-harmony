@@ -40,9 +40,11 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
     // Create StringSession with the string
     const stringSession = new StringSession(safeSessionString);
     
+    // Critical validation for debugging
     console.log("StringSession created successfully:", 
         "type:", typeof stringSession, 
-        "instanceof StringSession:", stringSession instanceof StringSession);
+        "instanceof StringSession:", stringSession instanceof StringSession,
+        "constructor name:", stringSession.constructor.name);
     
     console.log("Initializing Telegram client...");
     

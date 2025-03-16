@@ -1,4 +1,3 @@
-
 import { serve } from "./deps.ts";
 import { createClient, TelegramClient, StringSession, log, logError } from "./deps.ts";
 import { handleQrLogin, processQrCodeLogin } from "./qr-login.ts";
@@ -66,23 +65,21 @@ serve(async (req) => {
           log("API ID:", apiId, "type:", typeof apiId);
           log("API Hash:", apiHash.substring(0, 3) + "...", "type:", typeof apiHash);
           
+          // CRITICAL FIX: Create a minimal working example with explicit StringSession
           try {
-            // CRITICAL FIX: Create StringSession with explicit empty string and validate it
             log("Creating StringSession explicitly with empty string");
             const stringSession = new StringSession("");
             
-            // Explicit validation - critical for debugging
-            log("StringSession type check:", 
+            log("StringSession created successfully:", 
                 "type:", typeof stringSession, 
-                "constructor name:", stringSession.constructor.name,
                 "instanceof StringSession:", stringSession instanceof StringSession);
             
             // Convert apiId to number explicitly
             const apiIdNum = Number(apiId);
             log("API ID converted to number:", apiIdNum);
             
-            // Create TelegramClient with validated StringSession
-            log("Creating TelegramClient with validated StringSession");
+            // Create TelegramClient with stringSession
+            log("Creating TelegramClient with stringSession");
             const client = new TelegramClient(
               stringSession,
               apiIdNum,
@@ -90,7 +87,6 @@ serve(async (req) => {
               {
                 connectionRetries: 3,
                 useWSS: true,
-                baseLogger: console,
                 deviceModel: "Edge Function",
                 systemVersion: "Deno",
                 appVersion: "1.0.0",
@@ -101,19 +97,11 @@ serve(async (req) => {
             try {
               // Test connection to verify credentials
               log("Starting Telegram client...");
-              await client.start({
-                phoneNumber: async () => "",
-                password: async () => "",
-                phoneCode: async () => "",
-                onError: (err) => {
-                  logError("Connection error", err);
-                  throw err;
-                },
-              });
+              await client.connect();
               
               log("Getting user info to verify connection...");
-              const me = await client.getMe();
-              log("Successfully verified connection with user:", me);
+              const isAuthorized = await client.isUserAuthorized();
+              log("Authorization status:", isAuthorized);
               
               await client.disconnect();
               log("Disconnected from Telegram");
