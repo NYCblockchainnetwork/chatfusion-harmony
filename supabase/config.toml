@@ -102,9 +102,10 @@ vector_port = 54330
 backend = "postgres"
 
 [functions]
+# Port to use for the Functions API URL.
 port = 54321
 
+# Define individual edge functions here
 [[functions.function]]
 name = "telegram-auth"
 verify_jwt = false
-
