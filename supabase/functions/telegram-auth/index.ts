@@ -1,3 +1,4 @@
+
 import { serve } from "./deps.ts";
 import { createClient, TelegramClient, StringSession, log, logError } from "./deps.ts";
 import { handleQrLogin, processQrCodeLogin } from "./qr-login.ts";
@@ -61,106 +62,123 @@ serve(async (req) => {
             }, 400);
           }
           
-          // Debug info for StringSession
-          log("API ID type:", typeof apiId, "Value:", apiId);
-          log("API Hash type:", typeof apiHash, "Value (first 3 chars):", apiHash.substring(0, 3) + "...");
-          
-          // CRITICAL FIX: Do not pre-initialize the empty session variable
-          // Directly create StringSession with empty string literal
-          log("Creating StringSession instance directly...");
-          const stringSession = new StringSession("");
-          log("StringSession created:", typeof stringSession, "Is instance of StringSession:", stringSession instanceof StringSession);
-          
-          // Initialize client with credentials - cast apiId to number explicitly
-          log("Creating TelegramClient instance...");
-          const client = new TelegramClient(stringSession, Number(apiId), apiHash, {
-            connectionRetries: 3,
-            useWSS: true,
-            baseLogger: console,
-            deviceModel: "Edge Function",
-            systemVersion: "Deno",
-            appVersion: "1.0.0",
-            langCode: "en"
-          });
+          // Debug logs
+          log("API ID:", apiId, "type:", typeof apiId);
+          log("API Hash:", apiHash.substring(0, 3) + "...", "type:", typeof apiHash);
           
           try {
-            // Test connection to verify credentials
-            log("Starting Telegram client...");
-            await client.start({
-              phoneNumber: async () => "",
-              password: async () => "",
-              phoneCode: async () => "",
-              onError: (err) => {
-                logError("Connection error", err);
-                throw err;
-              },
-            });
+            // IMPORTANT: The StringSession constructor MUST receive a string
+            // Create it directly without intermediate variables that might confuse types
+            log("Creating StringSession with empty string");
+            const stringSession = new StringSession("");
             
-            log("Getting user info to verify connection...");
-            const me = await client.getMe();
-            log("Successfully verified connection with user:", me);
+            log("StringSession created successfully:", 
+                "type:", typeof stringSession, 
+                "instanceof StringSession:", stringSession instanceof StringSession);
             
-            await client.disconnect();
-            log("Disconnected from Telegram");
+            // Number() ensures apiId is a number, not a string
+            log("Creating TelegramClient");
+            const client = new TelegramClient(
+              stringSession,
+              Number(apiId),
+              apiHash,
+              {
+                connectionRetries: 3,
+                useWSS: true,
+                baseLogger: console,
+                deviceModel: "Edge Function",
+                systemVersion: "Deno",
+                appVersion: "1.0.0",
+                langCode: "en"
+              }
+            );
             
-            // Store credentials if userId is provided
-            if (userId) {
-              log(`Storing credentials for user ${userId}`);
+            try {
+              // Test connection to verify credentials
+              log("Starting Telegram client...");
+              await client.start({
+                phoneNumber: async () => "",
+                password: async () => "",
+                phoneCode: async () => "",
+                onError: (err) => {
+                  logError("Connection error", err);
+                  throw err;
+                },
+              });
               
-              // Store API ID
-              const { error: apiIdError } = await supabase
-                .from("user_api_keys")
-                .upsert(
-                  {
-                    user_id: userId,
-                    service: "telegram_api_id",
-                    api_key: apiId,
-                    updated_at: new Date().toISOString(),
-                  },
-                  { onConflict: "user_id,service" }
-                );
+              log("Getting user info to verify connection...");
+              const me = await client.getMe();
+              log("Successfully verified connection with user:", me);
               
-              if (apiIdError) {
-                logError("Error storing API ID", apiIdError);
-              } else {
-                log("API ID stored successfully");
+              await client.disconnect();
+              log("Disconnected from Telegram");
+              
+              // Store credentials if userId is provided
+              if (userId) {
+                log(`Storing credentials for user ${userId}`);
+                
+                // Store API ID
+                const { error: apiIdError } = await supabase
+                  .from("user_api_keys")
+                  .upsert(
+                    {
+                      user_id: userId,
+                      service: "telegram_api_id",
+                      api_key: apiId,
+                      updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: "user_id,service" }
+                  );
+                
+                if (apiIdError) {
+                  logError("Error storing API ID", apiIdError);
+                } else {
+                  log("API ID stored successfully");
+                }
+                
+                // Store API Hash
+                const { error: apiHashError } = await supabase
+                  .from("user_api_keys")
+                  .upsert(
+                    {
+                      user_id: userId,
+                      service: "telegram_api_hash",
+                      api_key: apiHash,
+                      updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: "user_id,service" }
+                  );
+                
+                if (apiHashError) {
+                  logError("Error storing API Hash", apiHashError);
+                } else {
+                  log("API Hash stored successfully");
+                }
               }
               
-              // Store API Hash
-              const { error: apiHashError } = await supabase
-                .from("user_api_keys")
-                .upsert(
-                  {
-                    user_id: userId,
-                    service: "telegram_api_hash",
-                    api_key: apiHash,
-                    updated_at: new Date().toISOString(),
-                  },
-                  { onConflict: "user_id,service" }
-                );
+              // Save and return the session string
+              const savedSession = stringSession.save();
+              log("Session saved, length:", savedSession.length);
               
-              if (apiHashError) {
-                logError("Error storing API Hash", apiHashError);
-              } else {
-                log("API Hash stored successfully");
-              }
+              return createResponse({
+                valid: true,
+                message: "Credentials valid and successfully connected to Telegram",
+                session: savedSession
+              });
+            } catch (connectErr) {
+              logError("Error connecting to Telegram", connectErr);
+              return createResponse({
+                valid: false,
+                error: "Failed to connect to Telegram: " + (connectErr.message || "Unknown error"),
+                stack: connectErr.stack
+              }, 400);
             }
-            
-            // Save and return the session string
-            const savedSession = stringSession.save();
-            log("Session saved, returning session string:", savedSession ? "non-empty string" : "empty string");
-            
-            return createResponse({
-              valid: true,
-              message: "Credentials valid and successfully connected to Telegram",
-              session: savedSession
-            });
-          } catch (connectErr) {
-            logError("Error connecting to Telegram", connectErr);
+          } catch (sessionErr) {
+            logError("Error creating StringSession", sessionErr);
             return createResponse({
               valid: false,
-              error: "Failed to connect to Telegram: " + (connectErr.message || "Unknown error"),
-              stack: connectErr.stack
+              error: "Failed to initialize Telegram session: " + (sessionErr.message || "Unknown error"),
+              stack: sessionErr.stack
             }, 400);
           }
         } catch (validationErr) {

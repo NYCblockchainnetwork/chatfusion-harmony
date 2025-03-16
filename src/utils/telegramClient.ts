@@ -26,16 +26,33 @@ export async function createTelegramClient(credentials: TelegramCredentials) {
     }
     
     console.log("Creating StringSession...");
-    console.log("sessionString type:", typeof sessionString, "is null or undefined:", sessionString == null);
     
-    // CRITICAL FIX: Create StringSession directly with empty string literal or session string
-    // Do not use intermediate variables or conditionals that might confuse the typing
-    const stringSession = new StringSession(sessionString || "");
+    // Debug session string value
+    if (sessionString) {
+      console.log("Session string provided:", typeof sessionString, "length:", sessionString.length);
+      // Check if session string was accidentally JSON-stringified
+      try {
+        const parsed = JSON.parse(sessionString);
+        console.error("WARNING: Session string appears to be JSON. This is likely incorrect:", parsed);
+        // Continue anyway, as StringSession will handle this, but log the warning
+      } catch (e) {
+        // Not JSON, which is good
+        console.log("Session string is not JSON (expected)");
+      }
+    } else {
+      console.log("No session string provided, using empty string");
+    }
+    
+    // Ensure sessionString is a plain string, not an object or null
+    const safeSessionString = typeof sessionString === 'string' ? sessionString : "";
+    
+    // Create StringSession directly with the session string or empty string
+    const stringSession = new StringSession(safeSessionString);
     
     console.log("StringSession created successfully, instanceof StringSession:", stringSession instanceof StringSession);
     console.log("Initializing Telegram client...");
     
-    // Ensure apiId is passed as a number, not a string
+    // Make sure apiId is passed as a number
     const client = new TelegramClient(stringSession, Number(apiId), apiHash, {
       connectionRetries: 3,
       useWSS: true,
