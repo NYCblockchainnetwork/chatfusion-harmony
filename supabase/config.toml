@@ -101,6 +101,7 @@ vector_port = 54330
 # Configure one of the supported backends: `postgres`, `bigquery`
 backend = "postgres"
 
+# Functions configuration
 [functions]
 # Port to use for the Functions API URL.
 port = 54321
