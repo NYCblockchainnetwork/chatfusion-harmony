@@ -1,17 +1,9 @@
 
+// This file is no longer needed as we'll use the built-in StringSession directly
+// The file remains to prevent import errors, but we'll bypass its usage
 import { StringSession } from "./deps.ts";
+export { StringSession };
 
-export class CustomStringSession extends StringSession {
-  constructor(initialString = "") {
-    super(initialString);
-    log("CustomStringSession initialized");
-  }
-  
-  static log(message: string) {
-    console.log(`[CustomStringSession] ${message}`);
-  }
-}
-
-function log(message: string) {
-  console.log(`[CustomStringSession] ${message}`);
+export function log(message: string) {
+  console.log(`[StringSession] ${message}`);
 }

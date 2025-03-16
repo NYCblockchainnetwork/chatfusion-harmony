@@ -62,9 +62,10 @@ serve(async (req) => {
             }, 400);
           }
           
-          // Create string session - explicitly initialize as empty string
+          // Create string session - IMPORTANT: explicit initialization as required by Telegram.js
           log("Creating StringSession instance...");
-          const session = new StringSession("");
+          const sessionString = "";  // Start with empty session string
+          const session = new StringSession(sessionString);
           
           // Initialize client with credentials
           log("Creating TelegramClient instance...");
